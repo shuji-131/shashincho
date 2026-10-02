@@ -757,3 +757,56 @@ textarea,input[type=text]{font-size:16px}
 }
 .picks.multi button.on .no{display:flex}
 .modal .tiles{margin-top:4px}
+
+/* 見開きの型（v22）。左右2ページを並べた見本 */
+.lay2{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-bottom:8px;max-width:560px}
+.lay2 button{
+  position:relative;border:1.5px solid var(--tile-line);background:var(--tile);border-radius:8px;
+  padding:6px 6px 22px;cursor:pointer;display:flex;gap:2px;aspect-ratio:3/2.3;
+}
+.lay2 button:active{transform:scale(.97)}
+.lay2 .pg{position:relative;flex:1;background:var(--paper);border:1px solid rgba(0,0,0,.12);overflow:hidden}
+.lay2 .pg.l{border-radius:3px 0 0 3px}
+.lay2 .pg.r{border-radius:0 3px 3px 0}
+.lay2 .pg i,.lay2 .pano{position:absolute;background:#6b7280;border-radius:1px;display:block}
+.lay2 .pg i.t{background:transparent;border-top:1.5px solid #6b7280;border-bottom:1.5px solid #6b7280}
+.lay2 .pano{left:6px;right:6px;top:6px;bottom:22px;border-radius:2px}
+.lay2 .nm{position:absolute;left:0;right:0;bottom:3px;text-align:center;font-size:10.5px;font-weight:700;color:var(--tile-ink)}
+
+/* =========================================================
+   本棚の種類と並び替え（v22）
+   ========================================================= */
+.shtools{max-width:1040px;margin:0 auto 14px;display:flex;flex-direction:column;gap:8px}
+.shtools .cats{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.shtools .cats::-webkit-scrollbar{display:none}
+.shtools .cats button{
+  flex:0 0 auto;border:1.5px solid rgba(241,230,212,.45);background:rgba(0,0,0,.28);color:#f1e6d4;
+  border-radius:18px;padding:7px 13px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;min-height:38px;
+}
+.shtools .cats button.on{background:#e9c76c;border-color:#e9c76c;color:#2a1f12}
+.shtools .cats small{margin-left:6px;font-size:11px;opacity:.75;font-weight:600}
+.shtools .acts2{display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap}
+.shtools .mini{color:#f1e6d4;border-color:rgba(241,230,212,.45);background:rgba(0,0,0,.25);min-height:34px;font-size:12.5px}
+.shtools .mini.on{background:#e9c76c;border-color:#e9c76c;color:#2a1f12;font-weight:700}
+.shnote{max-width:1040px;margin:-6px auto 12px;color:#f1e6d4;font-size:12.5px;text-align:center}
+.shcat{
+  max-width:1040px;margin:18px auto 8px;color:#f1e6d4;font-family:var(--mincho);font-size:16px;
+  letter-spacing:.08em;text-shadow:0 2px 3px rgba(0,0,0,.6);display:flex;align-items:baseline;gap:8px;
+}
+.shcat small{font-family:var(--gothic);font-size:11px;opacity:.75;letter-spacing:0}
+.shempty{max-width:1040px;margin:20px auto;color:#d8c7ae;font-size:13px;text-align:center;line-height:1.8}
+/* 並び替え中の本。◀ ▶ を本の下に出す。本は少し沈めて「動かす状態」と分かるように */
+.bk.sorting .book{opacity:.8}
+.bk .mv{display:flex;gap:6px;margin:6px 0 2px;position:relative;z-index:2}
+.bk .mv button{
+  width:44px;height:36px;border-radius:9px;border:1.5px solid #e9c76c;background:#2a1f12e6;color:#e9c76c;
+  font-size:15px;cursor:pointer;
+}
+.bk .mv button:active{transform:scale(.95)}
+/* 種類の手入れの窓 */
+.catlist{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.catrow{display:flex;align-items:center;gap:6px;padding:8px 10px;border:1.5px solid var(--tile-line);border-radius:10px;background:var(--tile)}
+.catrow b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--tile-ink);font-size:14px}
+.catrow button{width:40px;height:38px;border-radius:8px;border:1.5px solid var(--tile-line);background:transparent;cursor:pointer;font-size:16px}
+.catrow button.bad{border-color:#c4674c;background:var(--bad-bg)}
+.catrow button:disabled{opacity:.3}

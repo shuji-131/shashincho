@@ -30,7 +30,7 @@ function uid(p) { return (p || "x") + Math.random().toString(36).slice(2, 8); }
 
 /* 版の印。Android の入れ物の中ならそちらの印を、外ならブラウザだと分かるように。
    ★app/build.gradle の versionName と MainActivity.BUILD_MARK と、ここの3つを必ず合わせる */
-var BUILD = "v21";
+var BUILD = "v22";
 function buildMark() {
   try {
     if (window.ShashinCho && ShashinCho.buildMark) return ShashinCho.buildMark();
@@ -576,6 +576,14 @@ var Store = (function () {
     if (i >= 0) { list.splice(i, 1); save(); }
   }
   /* このアルバムが使っている写真の鍵（表紙を選ぶときに使う） */
+  /* 本棚の並び替え。2冊の場所を入れ替える */
+  function swap(idA, idB) {
+    var i = list.findIndex(function (a) { return a.id === idA; });
+    var j = list.findIndex(function (a) { return a.id === idB; });
+    if (i < 0 || j < 0) return;
+    var t = list[i]; list[i] = list[j]; list[j] = t;
+    flush();
+  }
   function photoKeys(a) {
     var out = [];
     (a.pages || []).forEach(function (p) {
@@ -586,7 +594,7 @@ var Store = (function () {
     return out;
   }
   return { load: load, save: save, flush: flush, all: all, byId: byId, add: add,
-           touch: touch, remove: remove, photoKeys: photoKeys };
+           touch: touch, remove: remove, photoKeys: photoKeys, swap: swap };
 })();
 
 /* =========================================================
@@ -1117,6 +1125,96 @@ function askName(title, value, okLabel) {
 }
 
 /* =========================================================
+   種類（本棚の分類）。名前の並びだけを持つ。本は a.cat に名前を持つ
+   ★本のファイル（渡す）には入れない。種類は持ち主ごとのもの
+   ========================================================= */
+var Cats = (function () {
+  var K = "shashincho.cats", list = null;
+  function load() {
+    if (list) return list;
+    try { list = JSON.parse(localStorage.getItem(K) || "[]"); } catch (e) { list = []; }
+    if (!Array.isArray(list)) list = [];
+    list = list.filter(function (x) { return typeof x === "string" && x; });
+    return list;
+  }
+  function save() { try { localStorage.setItem(K, JSON.stringify(list)); } catch (e) { toast("保存できませんでした"); } }
+  function all() { return load().slice(); }
+  function has(n) { return load().indexOf(n) >= 0; }
+  function add(n) {
+    n = String(n || "").trim().slice(0, 20);
+    if (!n) return false;
+    if (has(n)) { toast("「" + n + "」はもうあります"); return true; }
+    load().push(n); save(); return true;
+  }
+  function rename(o, n) {
+    n = String(n || "").trim().slice(0, 20);
+    if (!n || n === o) return;
+    if (has(n)) { toast("「" + n + "」はもうあります"); return; }
+    var i = load().indexOf(o); if (i < 0) return;
+    list[i] = n; save();
+    Store.all().forEach(function (a) { if (a.cat === o) a.cat = n; });
+    Store.flush();
+  }
+  function remove(n) {
+    var i = load().indexOf(n); if (i < 0) return;
+    list.splice(i, 1); save();
+    Store.all().forEach(function (a) { if (a.cat === n) delete a.cat; });
+    Store.flush();
+  }
+  function move(n, d) {
+    var i = load().indexOf(n), j = i + d;
+    if (i < 0 || j < 0 || j >= list.length) return;
+    var t = list[i]; list[i] = list[j]; list[j] = t; save();
+  }
+  /* 種類の手入れの窓。閉じたら Promise が終わる */
+  function manage() {
+    return new Promise(function (done) {
+      var w = document.createElement("div");
+      w.className = "modal";
+      function draw() {
+        var cs = all();
+        w.innerHTML = '<div class="box"><h3>🏷️ 種類を作る・直す</h3>'
+          + '<p>本を種類ごとに分けて棚に並べます。本を入れるのは、本の「…」→「🏷️ 種類を決める」から。'
+          + '種類を消しても本は消えません（種類なしに戻ります）。</p>'
+          + (cs.length ? '<div class="catlist">' + cs.map(function (c, i) {
+              return '<div class="catrow"><b>🏷️ ' + esc(c) + '</b>'
+                + '<button data-up="' + i + '"' + (i ? "" : " disabled") + ' aria-label="上へ">⬆️</button>'
+                + '<button data-down="' + i + '"' + (i < cs.length - 1 ? "" : " disabled") + ' aria-label="下へ">⬇️</button>'
+                + '<button data-ren="' + i + '" aria-label="名前を変える">✏️</button>'
+                + '<button data-del="' + i + '" class="bad" aria-label="消す">🗑️</button></div>';
+            }).join("") + '</div>' : '<p>まだ種類がありません。</p>')
+          + '<button class="big" id="catadd">＋ 新しい種類を作る</button>'
+          + '<button class="big ghost" id="catok">閉じる</button></div>';
+        $("#catadd", w).onclick = function () {
+          askName("新しい種類の名前", "", "作る").then(function (n) { if (n) add(n); draw(); });
+        };
+        $("#catok", w).onclick = function () { w.remove(); done(); };
+        $$("[data-up]", w).forEach(function (b) { b.onclick = function () { move(cs[+b.getAttribute("data-up")], -1); draw(); }; });
+        $$("[data-down]", w).forEach(function (b) { b.onclick = function () { move(cs[+b.getAttribute("data-down")], 1); draw(); }; });
+        $$("[data-ren]", w).forEach(function (b) {
+          b.onclick = function () {
+            var o = cs[+b.getAttribute("data-ren")];
+            askName("種類の名前を変える", o, "変える").then(function (n) { if (n) rename(o, n); draw(); });
+          };
+        });
+        $$("[data-del]", w).forEach(function (b) {
+          b.onclick = function () {
+            var o = cs[+b.getAttribute("data-del")];
+            ask("「" + o + "」を消しますか", "中の本は消えません。種類なしに戻ります。", [
+              { label: "消す", kind: "bad", value: true }, { label: "やめる", value: null }
+            ]).then(function (y) { if (y) remove(o); draw(); });
+          };
+        });
+      }
+      w.onclick = function (e) { if (e.target === w) { w.remove(); done(); } };
+      document.body.appendChild(w);
+      draw();
+    });
+  }
+  return { all: all, has: has, add: add, rename: rename, remove: remove, move: move, manage: manage };
+})();
+
+/* =========================================================
    本棚
    ========================================================= */
 var Shelf = (function () {
@@ -1151,12 +1249,51 @@ var Shelf = (function () {
     var bw = Math.min(150, Math.floor((cw - gap * (cols - 1)) / cols));
     return { cols: cols, bw: bw, bh: Math.round(bw / 0.85), gap: gap };
   }
+  /* ★見せ方の状態。filter＝いま見ている種類（null＝すべて／""＝種類なし）、sorting＝並び替え中 */
+  var filter = null, sorting = false;
+
+  function plate(a) {
+    return '<div class="plate"><b>' + esc(a.title || "無題") + '</b>'
+      + '<span>' + (a.pages || []).length + 'ページ' + (a.locked ? '・見るだけ' : '') + '</span>'
+      + (sorting ? "" : '<button class="ed" data-menu="' + a.id + '" aria-label="' + esc(a.title || "無題") + 'のメニュー">…</button>')
+      + '</div>';
+  }
+  function cell(a) {
+    return '<div class="bk' + (sorting ? " sorting" : "") + '">'
+      + '<button class="book" data-open="' + a.id + '" aria-label="' + esc(a.title || "無題") + 'を開く">'
+      + bookFace(a) + '</button>'
+      + (sorting ? '<span class="mv"><button data-mv="-1" data-id="' + a.id + '" aria-label="前へ">◀</button>'
+                 + '<button data-mv="1" data-id="' + a.id + '" aria-label="後ろへ">▶</button></span>' : "")
+      + plate(a) + '</div>';
+  }
+  /* 1つの棚（段ごとに棚板）。withNew＝最後に「新しいアルバム」を置く */
+  function caseHTML(list, L, withNew) {
+    var cells = list.map(cell);
+    if (withNew && !sorting) cells.push('<div class="bk"><button class="book newbook" data-new="1"><b>＋</b>新しい<br>アルバム</button>'
+      + '<div class="plate vacant"></div></div>');
+    if (!cells.length) return '<p class="shempty">この種類の本はまだありません。本の「…」→「🏷️ 種類を決める」で入れられます。</p>';
+    var h = ['<div class="case" style="--bw:' + L.bw + 'px;--bh:' + L.bh + 'px;--gap:' + L.gap + 'px">'];
+    for (var r = 0; r < cells.length; r += L.cols) {
+      h.push('<div class="tier"><div class="shrow">' + cells.slice(r, r + L.cols).join("") + '</div>'
+        + '<div class="board" aria-hidden="true"></div></div>');
+    }
+    h.push('</div>');
+    return h.join("");
+  }
+  function catOf(a) { return a.cat && Cats.has(a.cat) ? a.cat : ""; }
+  /* いま見えている本（この順に並ぶ） */
+  function visible() {
+    var list = Store.all();
+    if (filter === null) return list;
+    return list.filter(function (a) { return catOf(a) === filter; });
+  }
   function render() {
     var list = Store.all();
+    if (filter !== null && filter !== "" && !Cats.has(filter)) filter = null;
     var want = [];
-    list.forEach(function (a) { if (!bindingOf(a)) want = want.concat(coverKeys(a)); });
+    visible().forEach(function (a) { if (!bindingOf(a)) want = want.concat(coverKeys(a)); });
     return Photos.warm(want).then(function () {
-      var L = layout();
+      var L = layout(), cats = Cats.all();
       var h = ['<div class="shelfhead"><h2>本棚</h2><p>'
         + (list.length ? list.length + "冊" : "まだ1冊もありません")
         + '<span class="ver">' + esc(buildMark()) + '</span></p>'
@@ -1164,45 +1301,106 @@ var Shelf = (function () {
         + (window.Ios && Ios.isIos() && !Ios.inApk() ? '<button class="mini" id="iosuse">📱 iPhoneで使う</button>' : "")
         + '<button class="mini" id="receive">本を受け取る</button>'
         + '<button class="mini" id="library">取り込んだ写真</button></span></div>'];
-      var cells = list.map(function (a) {
-        return '<div class="bk">'
-          + '<button class="book" data-open="' + a.id + '" aria-label="' + esc(a.title || "無題") + 'を開く">'
-          + bookFace(a) + '</button>'
-          + '<div class="plate"><b>' + esc(a.title || "無題") + '</b>'
-          + '<span>' + (a.pages || []).length + 'ページ' + (a.locked ? '・見るだけ' : '') + '</span>'
-          + '<button class="ed" data-menu="' + a.id + '" aria-label="' + esc(a.title || "無題") + 'のメニュー">…</button>'
-          + '</div></div>';
-      });
-      cells.push('<div class="bk"><button class="book newbook" id="newbook"><b>＋</b>新しい<br>アルバム</button>'
-        + '<div class="plate vacant"></div></div>');
-      /* 段ごとに分ける。棚板は段ごとに1枚 */
-      h.push('<div class="case" style="--bw:' + L.bw + 'px;--bh:' + L.bh + 'px;--gap:' + L.gap + 'px">');
-      for (var r = 0; r < cells.length; r += L.cols) {
-        h.push('<div class="tier"><div class="shrow">' + cells.slice(r, r + L.cols).join("") + '</div>'
-          + '<div class="board" aria-hidden="true"></div></div>');
+
+      /* 種類の札（すべて／種類ごと／種類なし）と、並び替え・種類の手入れ */
+      var none = list.filter(function (a) { return !catOf(a); }).length;
+      h.push('<div class="shtools"><div class="cats" role="tablist">'
+        + '<button data-cat="*" class="' + (filter === null ? "on" : "") + '">📚 すべて</button>'
+        + cats.map(function (c) {
+            var n = list.filter(function (a) { return catOf(a) === c; }).length;
+            return '<button data-cat="' + esc(c) + '" class="' + (filter === c ? "on" : "") + '">🏷️ ' + esc(c)
+              + '<small>' + n + '</small></button>';
+          }).join("")
+        + (cats.length && none ? '<button data-cat="" class="' + (filter === "" ? "on" : "") + '">種類なし<small>' + none + '</small></button>' : "")
+        + '</div><div class="acts2">'
+        + '<button class="mini' + (sorting ? " on" : "") + '" id="sortbtn">' + (sorting ? "✅ 並び替えを終わる" : "↕️ 並び替え") + '</button>'
+        + '<button class="mini" id="catbtn">🏷️ 種類を作る・直す</button></div></div>');
+      if (sorting) h.push('<p class="shnote">◀ ▶ で本を動かします。終わったら「✅ 並び替えを終わる」。</p>');
+
+      if (filter === null && cats.length) {
+        /* すべて＝種類ごとに棚を分けて並べる。種類なしは最後 */
+        cats.forEach(function (c) {
+          var mine = list.filter(function (a) { return catOf(a) === c; });
+          if (!mine.length) return;
+          h.push('<h3 class="shcat">🏷️ ' + esc(c) + '<small>' + mine.length + '冊</small></h3>' + caseHTML(mine, L, false));
+        });
+        var rest = list.filter(function (a) { return !catOf(a); });
+        h.push('<h3 class="shcat">' + (rest.length ? '種類なし<small>' + rest.length + '冊</small>' : '＋ 新しいアルバム') + '</h3>'
+          + caseHTML(rest, L, true));
+      } else {
+        h.push(caseHTML(visible(), L, true));
       }
-      h.push('</div>');
       $("#shelf").innerHTML = h.join("");
       bind();
     });
   }
+  /* 並び替え。★見えている並びの中でとなりと入れ替える（種類で絞っていても、その中で動く） */
+  function moveBook(id, dir) {
+    var vis = filter === null && Cats.all().length
+      ? Store.all().filter(function (a) { return catOf(a) === catOf(Store.byId(id)); })
+      : visible();
+    var i = vis.findIndex(function (a) { return a.id === id; }), j = i + dir;
+    if (i < 0 || j < 0 || j >= vis.length) return;
+    Store.swap(vis[i].id, vis[j].id);
+    render();
+  }
   function bind() {
     $$("#shelf [data-open]").forEach(function (b) {
-      b.onclick = function () { App.open(b.getAttribute("data-open"), "read"); };
+      b.onclick = function () { if (sorting) return; App.open(b.getAttribute("data-open"), "read"); };
     });
     $$("#shelf [data-menu]").forEach(function (b) {
       b.onclick = function (e) { e.stopPropagation(); menu(b.getAttribute("data-menu")); };
     });
+    $$("#shelf [data-mv]").forEach(function (b) {
+      b.onclick = function (e) { e.stopPropagation(); moveBook(b.getAttribute("data-id"), +b.getAttribute("data-mv")); };
+    });
+    $$("#shelf [data-cat]").forEach(function (b) {
+      b.onclick = function () {
+        var c = b.getAttribute("data-cat");
+        filter = c === "*" ? null : c;
+        render();
+      };
+    });
+    $("#sortbtn").onclick = function () { sorting = !sorting; render(); };
+    $("#catbtn").onclick = function () { Cats.manage().then(render); };
     $("#library").onclick = function () { Library.open(); };
     $("#receive").onclick = function () { BookFile.receive(); };
     if ($("#iosuse")) $("#iosuse").onclick = function () { Ios.guide(); };
-    $("#newbook").onclick = function () {
-      askName("新しいアルバム", "", "作る").then(function (name) {
-        if (!name) return;
-        var a = Store.add({ title: name, pages: [page("door", "生成", [name])] });
-        App.open(a.id, "make");
-      });
-    };
+    $$("#shelf [data-new]").forEach(function (b) {
+      b.onclick = function () {
+        askName("新しいアルバム", "", "作る").then(function (name) {
+          if (!name) return;
+          var a = { title: name, pages: [page("door", "生成", [name])] };
+          /* 種類で絞って見ている時は、その種類に入れて作る */
+          if (filter) a.cat = filter;
+          a = Store.add(a);
+          App.open(a.id, "make");
+        });
+      };
+    });
+  }
+  /* 「…」→ 種類を決める */
+  function pickCat(a) {
+    var cats = Cats.all();
+    return ask("🏷️ 種類を決める", "「" + (a.title || "無題") + "」をどの種類に入れますか。", cats.map(function (c) {
+      return { label: "🏷️ " + c + (catOf(a) === c ? "（いまここ）" : ""), value: "c:" + c };
+    }).concat([
+      { label: "種類なし" + (!catOf(a) ? "（いまここ）" : ""), value: "none" },
+      { label: "＋ 新しい種類を作って入れる", kind: "", value: "new" },
+      { label: "やめる", value: null }
+    ])).then(function (v) {
+      if (!v) return;
+      if (v === "new") {
+        return askName("新しい種類の名前", "", "作って入れる").then(function (n) {
+          if (!n) return;
+          if (!Cats.add(n)) return;
+          a.cat = n.trim(); Store.flush(); render(); toast("「" + a.cat + "」に入れました");
+        });
+      }
+      if (v === "none") delete a.cat; else a.cat = v.slice(2);
+      Store.flush(); render();
+      toast(a.cat ? "「" + a.cat + "」に入れました" : "種類を外しました");
+    });
   }
   /* 受け取った本（見るだけ）の「…」。
      ★組む・名前を変える・表紙のデザイン・丸ごと写す は出さない。
@@ -1213,10 +1411,12 @@ var Shelf = (function () {
       { label: "見る", kind: "", value: "read" },
       { label: "PDFにする", value: "pdf" },
       { label: "1冊のファイルにする（渡す）", value: "file" },
+      { label: "🏷️ 種類を決める", value: "cat" },
       { label: "この1冊を捨てる", kind: "bad", value: "del" },
       { label: "やめる", value: null }
     ]).then(function (v) {
       if (v === "read") return App.open(a.id, "read");
+      if (v === "cat") return pickCat(a);
       if (v === "pdf") return PdfOut.start(a);
       if (v === "file") return BookFile.start(a);
       if (v === "del") {
@@ -1249,6 +1449,7 @@ var Shelf = (function () {
       { label: "表紙のデザイン", value: "binding" },
       { label: "PDFにする", value: "pdf" },
       { label: "1冊のファイルにする（渡す）", value: "file" },
+      { label: "🏷️ 種類を決める", value: "cat" },
       { label: "丸ごと写す", value: "dup" },
       { label: "この1冊を捨てる", kind: "bad", value: "del" },
       { label: "やめる", value: null }
@@ -1256,6 +1457,7 @@ var Shelf = (function () {
       if (v === "edit") return App.open(id, "make");
       if (v === "pdf") return PdfOut.start(a);
       if (v === "file") return BookFile.start(a);
+      if (v === "cat") return pickCat(a);
       if (v === "binding") {
         return ask("表紙のデザイン", "選ぶと、表紙と裏表紙が対になって付きます。" + NL
           + "見る画面とPDFの最初と最後に出ます（ページの数には入りません）。",
@@ -1588,7 +1790,13 @@ var Read = (function () {
     return Math.max(0, Math.min(n - 1, li - off()));
   }
   return { render: render, go: go, jump: jump, at: at,
-           flip: function () { manual = !yoko(); render(); } };
+           flip: function () { manual = !yoko(); render(); },
+           /* 横（見開き）にして、並びの i 番目を含む見開きを開く（編集の「見開きで確かめる」） */
+           showSpread: function (i) {
+             manual = true; idx = i || 0; sp = 0;
+             spreads().forEach(function (s, k) { if (s[0] === i || s[1] === i) sp = k; });
+             render();
+           } };
 })();
 
 /* =========================================================
@@ -1909,7 +2117,20 @@ var Make = (function () {
     }).join("") + '</div>');
 
     if (tab === "page") {
-    h.push('<div class="grp"><h3>🧩 組み方</h3>');
+    var pr = pairOf(pi);
+    h.push('<div class="grp"><h3>📖 見開きをまとめて作る</h3>'
+      + '<p class="note" style="margin:0 0 8px">' + (pr.made
+          ? "1ページ目は右に1枚だけで出るので、うしろに2ページ足して見開きにします。"
+          : (pr.L + 1) + "・" + (pr.R + 1) + "ページ目（本を横にしたとき左右に並ぶ2ページ）を、まとめて作ります。")
+      + '</p><div class="lay2">' + SPREADS.map(function (sp) {
+          return '<button data-spread="' + sp.key + '" aria-label="' + esc(sp.name) + '">'
+            + '<span class="pg l">' + spreadIcon(sp.pano ? null : sp.L) + '</span>'
+            + '<span class="pg r">' + spreadIcon(sp.pano ? null : sp.R) + '</span>'
+            + (sp.pano ? '<i class="pano"></i>' : "")
+            + '<span class="nm">' + esc(sp.name) + '</span></button>';
+        }).join("") + '</div>'
+      + tiles([["👀", "見開きで確かめる", 'data-do="seespread"']]) + '</div>');
+    h.push('<div class="grp"><h3>🧩 組み方（このページだけ）</h3>');
     h.push('<div class="row two" style="margin-bottom:10px">'
       + chip("🧩 型で組む", p.mode === "型", "mode-kata")
       + chip("✋ 自由に置く", p.mode === "自由", "mode-jiyu") + '</div>');
@@ -2168,6 +2389,9 @@ var Make = (function () {
       };
     });
 
+    $$("#panel [data-spread]").forEach(function (b) {
+      b.onclick = function () { applySpread(b.getAttribute("data-spread")); };
+    });
     $$("#panel [data-lay]").forEach(function (b) {
       b.onclick = function () { applyLayout(b.getAttribute("data-lay")); saved(); refresh(); offerPhotos(); };
     });
@@ -2182,7 +2406,14 @@ var Make = (function () {
           fillWindow(true); drawPanel(); return;
         }
         if (d === "pos-reset" && it) {
+          if (it.pg) { syncPano(it); return; }      /* つながった写真は、つながる位置へ戻す */
           resetPos(it); applyPos(it); syncSliders(it); saved(); lateStrip(); return;
+        }
+        if (d === "seespread") {
+          Store.flush();
+          App.show("read", "replace");
+          Read.showSpread(pi + (bindingOf(A()) ? 1 : 0));
+          return;
         }
         if (d === "add-photo") {
           var n = item({ k: "photo", x: 18, y: 26, w: 52, h: 38, zi: topZ() + 1 });
@@ -2397,6 +2628,102 @@ var Make = (function () {
   }
 
   /* ---------- 写真を選ぶ窓 ---------- */
+  /* ---------- 見開き ----------
+     ★見開きの組は、見る画面（横）の並びと同じ決まりで決める（Read の spreads）。
+       表紙のデザインが無い本は 1ページ目が右に1枚だけ → (2,3)(4,5)… が組。
+       表紙のデザインがある本は 表紙が右に1枚 → (1,2)(3,4)… が組。
+       ★だから表紙のデザインを付け外しすると、組が1ページずれる（選ぶ窓の注意書きに出す） */
+  var SPREADS = [
+    { key: "pano", name: "1枚を見開きいっぱい", L: "full", R: "full", pano: true },
+    { key: "ff",   name: "左右に1枚ずつ",       L: "full", R: "full" },
+    { key: "tf",   name: "文と写真",            L: "door", R: "full" },
+    { key: "vv",   name: "左右で4枚",           L: "v2",   R: "v2" },
+    { key: "fg",   name: "大1枚＋4枚",          L: "full", R: "g4" },
+    { key: "gg",   name: "左右で8枚",           L: "g4",   R: "g4" }
+  ];
+  function spreadIcon(key) {
+    if (!key) return "";
+    return layOf(key).slots.map(function (s) {
+      return '<i class="' + (s.k === "text" ? "t" : "") + '" style="left:' + s.x + '%;top:' + s.y
+        + '%;width:' + s.w + '%;height:' + s.h + '%"></i>';
+    }).join("");
+  }
+  /* このページが入る見開きの組（ページの添字）。made＝1ページ目なので新しく足す */
+  function pairOf(i) {
+    var off = bindingOf(A()) ? 1 : 0, s = i + off;
+    if (s === 0) return { L: 1, R: 2, made: true };
+    var Ls = s % 2 === 1 ? s : s - 1;
+    return { L: Ls - off, R: Ls - off + 1, made: false };
+  }
+  function applySpread(key) {
+    var sp = null;
+    SPREADS.forEach(function (x) { if (x.key === key) sp = x; });
+    if (!sp) return;
+    var pr = pairOf(pi), pg = pages(), bg = cur().bg;
+    if (pr.made) pg.splice(1, 0, page(sp.L, bg), page(sp.R, bg));
+    while (pg.length <= pr.R) pg.push(page("full", bg));
+    pi = pr.L; applyLayout(sp.L);
+    pi = pr.R; applyLayout(sp.R);
+    var Lp = pg[pr.L], Rp = pg[pr.R];
+    /* 前に付いていたつながりは外す（このページの写真はもう別の組） */
+    [Lp, Rp].forEach(function (p) { p.items.forEach(function (x) { delete x.pg; delete x.side; }); });
+    var slots;
+    if (sp.pano) {
+      var a = Lp.items.filter(function (x) { return x.kind === "photo"; })[0];
+      var b = Rp.items.filter(function (x) { return x.kind === "photo"; })[0];
+      var g = uid("pg");
+      a.pg = g; a.side = "L"; b.pg = g; b.side = "R";
+      if (!a.photo && b.photo) a.photo = b.photo;
+      b.photo = a.photo;
+      slots = a.photo ? [] : [a];
+      syncPano(a);
+    } else {
+      slots = Lp.items.concat(Rp.items).filter(function (x) { return x.kind === "photo" && !x.photo; });
+    }
+    pi = pr.L; sel = null;
+    saved(); rebuild(); scrollTo(pi, false);
+    toast((pr.L + 1) + "・" + (pr.R + 1) + "ページ目を見開きにしました");
+    if (slots.length) pickMany(slots, sp.pano ? function () { syncPano(slots[0]); } : null);
+  }
+  /* つながった写真（1枚を見開きいっぱい）の相方を探す */
+  function panoMate(it) {
+    var m = null;
+    pages().forEach(function (p) {
+      p.items.forEach(function (x) { if (x !== it && x.pg && x.pg === it.pg) m = x; });
+    });
+    return m;
+  }
+  /* 1枚の写真が左右のページにまたがって見えるよう、寄せと大きさを決める。
+     ★式は imgCss / PdfOut.cover と同じ考え方（object-fit:cover のあと、x% を原点に z 倍）。
+       ページの幅 r（高さを1とする）、写真の縦横比 a。見開きは幅 2r。
+       a ≥ 2r（見開きより横長）… 高さで合わせる。z=1、左は x=50(2r−a)/(r−a)、右は x=50a/(a−r)
+       a < 2r                  … 幅で合わせる。z=2r÷(1ページに収めた時の幅)、左 x=0・右 x=100、y=50 */
+  function panoPos(a, side) {
+    var r = RATIO;
+    if (a >= 2 * r) {
+      return { z: 1, y: 50, x: side === "L" ? 50 * (2 * r - a) / (r - a) : 50 * a / (a - r) };
+    }
+    return { z: 2 * r / Math.max(r, a), y: 50, x: side === "L" ? 0 : 100 };
+  }
+  function syncPano(it) {
+    if (!it || !it.pg) return;
+    var m = panoMate(it);
+    if (!m) { delete it.pg; delete it.side; return; }
+    m.photo = it.photo;
+    if (!it.photo) { resetPos(it); resetPos(m); return; }
+    Photos.get(it.photo).then(function (src) {
+      if (!src) return;
+      return loadImg(src).then(function (img) {
+        var a = img.naturalWidth / img.naturalHeight;
+        [it, m].forEach(function (x) {
+          var q = panoPos(a, x.side);
+          x.px = Math.round(q.x * 100) / 100; x.py = q.y; x.pz = Math.round(q.z * 1000) / 1000;
+        });
+        saved(); fillWindow(); lateStrip();
+      });
+    }).catch(function () {});
+  }
+
   /* 型を選んだ直後、空いている写真の枠があれば、その数だけ選ぶ窓を出す */
   function offerPhotos() {
     var p = cur();
@@ -2423,7 +2750,7 @@ var Make = (function () {
     return next();
   }
   /* 何枚かまとめて選ぶ窓。押した順に番号が付き、その順で枠に入る */
-  function pickMany(slots) {
+  function pickMany(slots, after) {
     var n = slots.length;
     myKeys().then(function (keys) {
       var order = [];
@@ -2455,7 +2782,9 @@ var Make = (function () {
       }
       function apply() {
         slots.forEach(function (it, i) { if (order[i]) { it.photo = order[i]; resetPos(it); } });
-        w.remove(); saved(); refresh();
+        w.remove();
+        if (after) after();
+        saved(); refresh();
         toast(order.length + "枚を入れました");
       }
       $$("[data-k]", w).forEach(function (b) {
@@ -2510,20 +2839,20 @@ var Make = (function () {
       w.onclick = function (e) { if (e.target === w) w.remove(); };
       $$("[data-k]", w).forEach(function (b) {
         b.onclick = function () {
-          it.photo = b.getAttribute("data-k"); resetPos(it); w.remove(); saved(); refresh();
+          it.photo = b.getAttribute("data-k"); resetPos(it); w.remove(); syncPano(it); saved(); refresh();
         };
       });
       $$("[data-do]", w).forEach(function (b) {
         b.onclick = function () {
           var d = b.getAttribute("data-do");
           if (d === "close") return w.remove();
-          if (d === "clear") { it.photo = null; w.remove(); saved(); refresh(); return; }
+          if (d === "clear") { it.photo = null; w.remove(); syncPano(it); saved(); refresh(); return; }
           var f = document.createElement("input");
           f.type = "file"; f.accept = "image/*";
           f.onchange = function () {
             if (!f.files || !f.files[0]) return;
             intake(f.files[0]).then(function (key) {
-              it.photo = key; resetPos(it); w.remove(); saved(); refresh();
+              it.photo = key; resetPos(it); w.remove(); syncPano(it); saved(); refresh();
               toast("取り込みました（長辺2000pxまで縮めています）");
             }).catch(function (err) { toast(err.message); });
           };
