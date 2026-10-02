@@ -227,7 +227,16 @@ var Ios = (function () {
     if (inApk()) return;
     if (location.protocol !== "https:") return;
     if (!("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.register("sw.js")["catch"](function () { /* 無くても使える */ });
+    /* ★新しい版の係が入れ替わったら、画面を1回だけ開き直す（古い画面のまま使い続けない）。
+       初めて入る時（前の係がいない時）は開き直さない */
+    var had = !!navigator.serviceWorker.controller, again = false;
+    navigator.serviceWorker.addEventListener("controllerchange", function () {
+      if (!had || again) return;
+      again = true;
+      try { if (window.Store && Store.flush) Store.flush(); } catch (e) {}
+      location.reload();
+    });
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" })["catch"](function () { /* 無くても使える */ });
   }
 
   function init() {

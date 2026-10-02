@@ -30,7 +30,7 @@ function uid(p) { return (p || "x") + Math.random().toString(36).slice(2, 8); }
 
 /* 版の印。Android の入れ物の中ならそちらの印を、外ならブラウザだと分かるように。
    ★app/build.gradle の versionName と MainActivity.BUILD_MARK と、ここの3つを必ず合わせる */
-var BUILD = "v20";
+var BUILD = "v21";
 function buildMark() {
   try {
     if (window.ShashinCho && ShashinCho.buildMark) return ShashinCho.buildMark();
