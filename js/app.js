@@ -30,7 +30,7 @@ function uid(p) { return (p || "x") + Math.random().toString(36).slice(2, 8); }
 
 /* 版の印。Android の入れ物の中ならそちらの印を、外ならブラウザだと分かるように。
    ★app/build.gradle の versionName と MainActivity.BUILD_MARK と、ここの3つを必ず合わせる */
-var BUILD = "v19";
+var BUILD = "v20";
 function buildMark() {
   try {
     if (window.ShashinCho && ShashinCho.buildMark) return ShashinCho.buildMark();
@@ -399,8 +399,10 @@ var Library = (function () {
       var w = document.createElement("div");
       w.className = "modal";
       w.innerHTML = '<div class="box"><h3>取り込んだ写真</h3>'
-        + '<p>' + (keys.length ? keys.length + "枚あります。押して選び、まとめて捨てられます。"
-                               : "まだ写真がありません。") + '</p>'
+        + '<p>' + (keys.length ? keys.length + "枚あります。ここで取り込んだ写真は、編集の「写真を選ぶ」に並びます。"
+                                 + "押して選ぶと、まとめて捨てられます。"
+                               : "まだ写真がありません。下の「写真を取り込む」から足せます。") + '</p>'
+        + '<button class="big" data-do="add">📷 写真を取り込む（何枚でも）</button>'
         + '<div class="picks lib">' + keys.map(function (k) {
             var n = (use[k] || []).length;
             return '<button data-k="' + esc(k) + '" aria-pressed="false"'
@@ -436,6 +438,25 @@ var Library = (function () {
         b.onclick = function () {
           var d = b.getAttribute("data-do");
           if (d === "close") return w.remove();
+          if (d === "add") {
+            /* ★ここで取り込んだ写真は、編集の「写真を選ぶ」に並ぶ */
+            var f = document.createElement("input");
+            f.type = "file"; f.accept = "image/*"; f.multiple = true;
+            f.onchange = function () {
+              var list = Array.prototype.slice.call(f.files || []), got = 0, i = 0;
+              if (!list.length) return;
+              (function next() {
+                if (i >= list.length) {
+                  toast(got + "枚を取り込みました（長辺2000pxまで縮めています）");
+                  w.remove(); open(); return;
+                }
+                toast("取り込んでいます " + (i + 1) + " / " + list.length);
+                intake(list[i++]).then(function () { got++; }, function () {}).then(next);
+              })();
+            };
+            f.click();
+            return;
+          }
           if (d === "unused") {
             $$("[data-k]", w).forEach(function (x) {
               if (!(use[x.getAttribute("data-k")] || []).length) set(x, true);
@@ -1188,7 +1209,7 @@ var Shelf = (function () {
        「写す」を残すと、写しのほうは組めてしまう */
   function lockedMenu(a) {
     ask(a.title || "無題", (a.pages || []).length + "ページ　受け取った本（見るだけ）" + NL
-      + "組み直しや名前の変更はできません。" + (a.gotAt ? NL + "受け取った日 " + a.gotAt : ""), [
+      + "編集や名前の変更はできません。" + (a.gotAt ? NL + "受け取った日 " + a.gotAt : ""), [
       { label: "見る", kind: "", value: "read" },
       { label: "PDFにする", value: "pdf" },
       { label: "1冊のファイルにする（渡す）", value: "file" },
@@ -1223,7 +1244,7 @@ var Shelf = (function () {
     if (!a) return;
     if (a.locked) return lockedMenu(a);
     ask(a.title || "無題", (a.pages || []).length + "ページ" + NL + "更新 " + (a.updatedAt || "—"), [
-      { label: "組む（編集する）", kind: "", value: "edit" },
+      { label: "✏️ 編集する", kind: "", value: "edit" },
       { label: "名前を変える", value: "rename" },
       { label: "表紙のデザイン", value: "binding" },
       { label: "PDFにする", value: "pdf" },
@@ -2103,7 +2124,7 @@ var Make = (function () {
         var a = b.getAttribute("data-act");
 
         /* 型／自由の切り替えだけは、パネルの中身そのものが変わるので作り直す */
-        if (a === "mode-kata") { toKata(); saved(); refresh(); return; }
+        if (a === "mode-kata") { toKata(); saved(); refresh(); offerPhotos(); return; }
         if (a === "mode-jiyu") { p.mode = "自由"; p.layout = "free"; saved(); refresh(); return; }
 
         if (a.indexOf("fr-") === 0 && it) it.frame = a.slice(3);
@@ -2148,7 +2169,7 @@ var Make = (function () {
     });
 
     $$("#panel [data-lay]").forEach(function (b) {
-      b.onclick = function () { applyLayout(b.getAttribute("data-lay")); saved(); refresh(); };
+      b.onclick = function () { applyLayout(b.getAttribute("data-lay")); saved(); refresh(); offerPhotos(); };
     });
 
     $$("#panel [data-do]").forEach(function (b) {
@@ -2376,21 +2397,115 @@ var Make = (function () {
   }
 
   /* ---------- 写真を選ぶ窓 ---------- */
+  /* 型を選んだ直後、空いている写真の枠があれば、その数だけ選ぶ窓を出す */
+  function offerPhotos() {
+    var p = cur();
+    if (!p || p.mode !== "型") return;
+    var empty = p.items.filter(function (x) { return x.kind === "photo" && !x.photo; });
+    if (empty.length) pickMany(empty);
+  }
+  /* 取り込んだ写真の鍵（受け取った本＝見るだけ の写真は使わせない） */
+  function myKeys() {
+    return Photos.keys().then(function (keys) {
+      var lk = Library.lockedKeys();
+      return keys.filter(function (k) { return !lk[k]; });
+    });
+  }
+  /* 端末から何枚か取り込む。1枚ずつ縮めてしまう（いちどに全部を開くとスマホで落ちる） */
+  function intakeMany(files, max, onEach) {
+    var list = Array.prototype.slice.call(files || [], 0, max), out = [], i = 0;
+    function next() {
+      if (i >= list.length) return Promise.resolve(out);
+      var f = list[i++];
+      if (onEach) onEach(i, list.length);
+      return intake(f).then(function (k) { out.push(k); }, function () {}).then(next);
+    }
+    return next();
+  }
+  /* 何枚かまとめて選ぶ窓。押した順に番号が付き、その順で枠に入る */
+  function pickMany(slots) {
+    var n = slots.length;
+    myKeys().then(function (keys) {
+      var order = [];
+      var w = document.createElement("div");
+      w.className = "modal";
+      w.innerHTML = '<div class="box"><h3>🖼️ 写真を選ぶ（' + n + '枚）</h3>'
+        + '<p>' + (n > 1 ? '押した順に番号が付き、その順で枠に入ります。' + n + '枚まで選べます。'
+                         : '押した写真が枠に入ります。')
+        + (keys.length ? '' : '<br>まだ取り込んだ写真がありません。「この端末から選ぶ」から足してください。') + '</p>'
+        + '<div class="picks multi">' + keys.map(function (k) {
+            return '<button data-k="' + esc(k) + '" aria-pressed="false"><img alt=""><b class="no"></b></button>';
+          }).join("") + '</div>'
+        + tiles([["📷", "この端末から選ぶ", 'data-do="file"'],
+                 ["✅", "入れる", 'data-do="ok" disabled', "pri"]])
+        + '<button class="big ghost" data-do="close">あとで入れる</button></div>';
+      w.onclick = function (e) { if (e.target === w) w.remove(); };
+      document.body.appendChild(w);
+      fillThumbs(w);
+      var ok = $('[data-do="ok"]', w);
+      function mark() {
+        $$("[data-k]", w).forEach(function (b) {
+          var at = order.indexOf(b.getAttribute("data-k"));
+          b.classList.toggle("on", at >= 0);
+          b.setAttribute("aria-pressed", at >= 0 ? "true" : "false");
+          $(".no", b).textContent = at >= 0 ? (at + 1) : "";
+        });
+        ok.disabled = !order.length;
+        $(".lb", ok).textContent = order.length ? order.length + "枚を入れる" : "入れる";
+      }
+      function apply() {
+        slots.forEach(function (it, i) { if (order[i]) { it.photo = order[i]; resetPos(it); } });
+        w.remove(); saved(); refresh();
+        toast(order.length + "枚を入れました");
+      }
+      $$("[data-k]", w).forEach(function (b) {
+        b.onclick = function () {
+          var k = b.getAttribute("data-k"), at = order.indexOf(k);
+          if (at >= 0) order.splice(at, 1);
+          else if (order.length >= n) { toast("選べるのは" + n + "枚までです"); return; }
+          else order.push(k);
+          if (n === 1 && order.length) return apply();   /* 1枚なら押した時点で入れる */
+          mark();
+        };
+      });
+      $('[data-do="close"]', w).onclick = function () { w.remove(); };
+      ok.onclick = function () { if (order.length) apply(); };
+      $('[data-do="file"]', w).onclick = function () {
+        var room = n - order.length;
+        if (room <= 0) { toast("もう" + n + "枚選んでいます"); return; }
+        var f = document.createElement("input");
+        f.type = "file"; f.accept = "image/*";
+        if (room > 1) f.multiple = true;
+        f.onchange = function () {
+          if (!f.files || !f.files.length) return;
+          if (f.files.length > room) toast("先頭の" + room + "枚だけ使います");
+          intakeMany(f.files, room, function (i, m) { toast("取り込んでいます " + i + " / " + m); })
+            .then(function (ks) {
+              if (!ks.length) { toast("写真を読めませんでした"); return; }
+              order = order.concat(ks);
+              apply();
+            });
+        };
+        f.click();
+      };
+    });
+  }
+
   function pickPhoto(it) {
     if (!it) return;
     /* ★本物をまとめて引き上げない。手元の上限（40枚）を超えた分が並ばなくなる。
        小さな見本を1枚ずつ作って並べる */
-    Photos.keys().then(function (keys) {
+    myKeys().then(function (keys) {
       var w = document.createElement("div");
       w.className = "modal";
-      w.innerHTML = '<div class="box"><h3>写真を選ぶ</h3>'
-        + '<p>「この端末から選ぶ」で足した写真も、ここに並びます。'
+      w.innerHTML = '<div class="box"><h3>🖼️ 写真を選ぶ</h3>'
+        + '<p>押した写真が枠に入ります。「この端末から選ぶ」で足した写真も、ここに並びます。'
         + '要らない写真は、本棚の「取り込んだ写真」から捨てられます。</p>'
         + '<div class="picks">' + keys.map(function (k) {
             return '<button data-k="' + esc(k) + '"><img alt=""></button>';
           }).join("") + '</div>'
-        + '<button class="big" data-do="file">この端末から選ぶ</button>'
-        + '<button class="big ghost" data-do="clear">写真を外す</button>'
+        + tiles([["📷", "この端末から選ぶ", 'data-do="file"', "pri"],
+                 ["🚫", "写真を外す", 'data-do="clear"']])
         + '<button class="big ghost" data-do="close">やめる</button></div>';
       w.onclick = function (e) { if (e.target === w) w.remove(); };
       $$("[data-k]", w).forEach(function (b) {
@@ -2557,6 +2672,21 @@ var Make = (function () {
     buildSlots(); fillWindow(); drawPanel(); drawStrip();
     scrollTo(keep, false);          /* ★入れ替えで先頭に戻るので、必ず戻す */
     pi = keep;
+    refit();
+    setTimeout(function () { quiet = false; }, 150);
+  }
+  /* ★測ったあとで下のページ帯や設定欄ができると、誌面の枠が縮む。
+     横向きの電話で誌面の下が切れていた（v20で修正）。縮んでいたら、その場で1回だけ測り直す。
+     ★見張り（ResizeObserver）にはしない。キーボードの出入りで作り直すと打っている欄が消える */
+  function refit() {
+    var h = $("#canvasArea").clientHeight;
+    if (!(h > 0) || Math.abs(h - slotH) <= 1) return;
+    var keep = pi;
+    if (!measure()) return;
+    quiet = true;
+    buildSlots(); fillWindow();
+    scrollTo(keep, false);
+    pi = keep;
     setTimeout(function () { quiet = false; }, 150);
   }
   function open(i) {
@@ -2566,6 +2696,7 @@ var Make = (function () {
     quiet = true;
     buildSlots(); bindScroll(); fillWindow(); drawPanel(); drawStrip();
     scrollTo(pi, false);
+    refit();
     setTimeout(function () { quiet = false; }, 150);
   }
   function at() { return pi; }
@@ -3150,7 +3281,7 @@ var BookFile = (function () {
       (a.pages || []).length + "ページ・写真" + keys.length + "枚を、1つのファイルにまとめます。" + NL
       + "目安の大きさ 約" + Math.max(1, Math.round(keys.length * 0.7)) + "MB" + NL + NL
       + "写真帖を入れている人なら、本棚の「本を受け取る」から入れられます。" + NL
-      + "受け取った人は見るだけで、組み直しはできません。", [
+      + "受け取った人は見るだけで、編集はできません。", [
       { label: "ファイルにする", kind: "", value: true },
       { label: "やめる", value: null }
     ]).then(function (yes) { if (yes) run(a, keys); });

@@ -565,10 +565,6 @@ details.sec .secin{padding:0 10px 10px}
 }
 
 @media (max-width:820px){
-  #mwrap{flex-direction:column}
-  #canvasArea{flex:1 1 54%;min-height:0}
-  #panel{flex:1 1 46%;border-left:0;border-top:1px solid var(--ui-line);min-height:0}
-  .lay{grid-template-columns:repeat(6,1fr)}
   #bar{gap:7px;padding-inline:12px}
   #bar h1{font-size:15px;letter-spacing:.06em}
   #bar .tag{display:none}
@@ -651,7 +647,7 @@ details.sec .secin{padding:0 10px 10px}
 .lay button{border:1.5px solid var(--tile-line);background:var(--tile);border-radius:8px}
 .lay button.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
 .lay span{font-size:10px;font-weight:600;color:var(--tile-ink)}
-@media (max-width:820px){ .lay{grid-template-columns:repeat(4,1fr)} }
+
 
 /* 色の見本の縁をはっきり */
 .sw{gap:9px}
@@ -694,3 +690,70 @@ details.sec > summary{padding:12px;font-size:13px;font-weight:700;color:var(--ti
   stroke-linecap:round;stroke-linejoin:round}
 .iosguide p{line-height:1.9}
 .iosguide .dim,.dim{font-size:12px;opacity:.8}
+
+/* =========================================================
+   端末の大きさに合わせる（v20）
+   ★井口さんの指摘＝「iPhone だと画面が合わなくて醜い。Android もだけど各端末に合わせて可変に」。
+     測ったら崩れていたのは主に編集画面で、どの端末でも「上に誌面・下に設定」に固定していた。
+     横向きの電話では誌面の高さ137px・設定欄117pxしか無かった（667×375）。
+     → 縦長で幅の狭い画面だけ上下に分け、横向き・タブレットは左右に並べる。
+   ★iPhone ならではの崩れ3つもここで止める
+     ①横に倒すと文字が勝手に大きくなる（text-size-adjust）
+     ②16px未満の入力欄に指を置くと画面を拡大し、そのまま戻らない
+     ③横向きで切り欠き（ノッチ）の下に画面が潜る（safe-area-inset-left/right）
+   ========================================================= */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+#app{
+  height:100%;height:100dvh;
+  padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px);
+}
+button,a,input,textarea,select,summary{touch-action:manipulation}
+textarea,input[type=text]{font-size:16px}
+.modal .box{max-height:84vh;max-height:84dvh}
+
+/* 設定欄（左右に並べる時の幅）。画面の幅に応じて 300〜420px */
+#panel{flex:0 0 clamp(290px,36vw,420px)}
+/* 型の見本・色の見本は、幅が広がっても大きくなりすぎないよう「何列入るか」で決める */
+.lay{grid-template-columns:repeat(auto-fill,minmax(62px,1fr))}
+.sw{grid-template-columns:repeat(auto-fill,minmax(32px,42px));justify-content:start}
+.tiles,.ptabs,#panel .row.two,#panel .row.three,#panel .row.four{max-width:560px}
+
+/* 縦長で幅の狭い画面（スマホを縦に持つ）だけ、上に誌面・下に設定 */
+@media (max-width:699px) and (orientation:portrait){
+  #mwrap{flex-direction:column}
+  #canvasArea{flex:1 1 52%;min-height:0}
+  #panel{flex:1 1 48%;border-left:0;border-top:1px solid var(--ui-line);min-height:0}
+  .slot .pgno{display:none}
+}
+
+/* 高さの低い画面（小さいスマホ・横向き）。タブ・タイル・ページ帯を薄くして設定欄に回す */
+@media (max-height:760px){
+  .ptabs{padding:7px 10px 6px;margin-bottom:10px}
+  .ptabs button{flex-direction:row;justify-content:center;gap:4px;padding:8px 2px}
+  .ptabs button .ico{font-size:15px}
+  .tile{min-height:58px;gap:3px}
+  .tile .ico{font-size:21px}
+  #pages{padding:6px 12px}
+  #pages .th{width:38px}
+}
+
+/* 横向きの電話。上の帯も薄く、設定欄は画面の4割 */
+@media (orientation:landscape) and (max-height:500px){
+  #panel{flex-basis:clamp(260px,44vw,400px);padding-top:10px}
+  .ptabs{top:-10px;margin-top:-10px}
+  #pages{padding:4px 10px}
+  #pages .th{width:30px}
+  #pages .add{width:30px;height:40px}
+  .shelfhead{margin-bottom:10px}
+}
+
+/* まとめて選ぶ窓。選んだ順の番号を写真の上に出す */
+.picks.multi button.on{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent)}
+.picks.multi button.on img{opacity:.7}
+.picks .no{
+  position:absolute;top:5px;left:5px;min-width:24px;height:24px;border-radius:12px;padding:0 6px;
+  display:none;align-items:center;justify-content:center;font-size:13px;font-weight:700;
+  background:var(--accent);color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.4);
+}
+.picks.multi button.on .no{display:flex}
+.modal .tiles{margin-top:4px}
