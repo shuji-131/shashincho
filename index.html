@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1b1e26">
+<meta name="color-scheme" content="light dark">
+<title>写真帖</title>
+<meta name="description" content="自分だけの写真集を作って、本のようにめくって読む。">
+<!-- 身内で使うページ。検索の一覧に載せない -->
+<meta name="robots" content="noindex, nofollow, noarchive">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32">
+<link rel="icon" href="icons/favicon-16.png" sizes="16x16">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon-180.png">
+<!-- ホーム画面に入れたときの名札。★iPhone は「ホーム画面に追加」を押したその瞬間に
+     ここを見に行くので、必ず <head> に置く。★Android の入れ物は manifest の行を取り除く -->
+<link rel="manifest" href="app.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="写真帖">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="app">
+  <div id="bar">
+    <button id="back" hidden aria-label="保存して一覧へ戻る">‹ 一覧</button>
+    <h1>写真帖</h1>
+    <span class="who" id="who"></span>
+    <span class="tag" id="build"></span>
+    <span class="sp"></span>
+    <div class="tabs" id="tabs" hidden>
+      <button id="tab-read" class="on">見る</button>
+      <button id="tab-make">組む</button>
+    </div>
+  </div>
+
+  <main>
+    <section class="view" id="shelf"></section>
+
+    <section class="view" id="read" hidden>
+      <div id="stage"></div>
+      <div id="ctl">
+        <button class="mini" id="home" aria-label="表紙へ戻る">表紙へ</button>
+        <button class="nv" id="prev" aria-label="前のページ">‹</button>
+        <span id="pn">1 / 1</span>
+        <button class="nv" id="next" aria-label="次のページ">›</button>
+        <button class="mini" id="mode">見開きで読む</button>
+        <p class="hint" id="hint"></p>
+      </div>
+    </section>
+
+    <section class="view" id="make" hidden>
+      <div id="mwrap">
+        <div id="canvasArea"></div>
+        <div id="panel"></div>
+      </div>
+      <div id="pages"></div>
+    </section>
+  </main>
+</div>
+
+<div id="toast"></div>
+
+<script src="js/ios.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
