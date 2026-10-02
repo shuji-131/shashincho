@@ -30,7 +30,7 @@ function uid(p) { return (p || "x") + Math.random().toString(36).slice(2, 8); }
 
 /* 版の印。Android の入れ物の中ならそちらの印を、外ならブラウザだと分かるように。
    ★app/build.gradle の versionName と MainActivity.BUILD_MARK と、ここの3つを必ず合わせる */
-var BUILD = "v22";
+var BUILD = "v23";
 function buildMark() {
   try {
     if (window.ShashinCho && ShashinCho.buildMark) return ShashinCho.buildMark();
@@ -927,7 +927,14 @@ var BINDINGS = [
   { key: "kon", name: "紺の革", front: "img/binding/kon_front.jpg", back: "img/binding/kon_back.jpg",
     shelf: "img/binding/kon_shelf.webp", ink: "#e9c76c" },
   { key: "aka", name: "赤の革", front: "img/binding/aka_front.jpg", back: "img/binding/aka_back.jpg",
-    shelf: "img/binding/aka_shelf.webp", ink: "#ecc873" }
+    shelf: "img/binding/aka_shelf.webp", ink: "#ecc873" },
+  /* 2026-10-02 追加（井口さんの絵3枚）。カラフルは地がクリーム色なので題名は濃い色 */
+  { key: "cha", name: "茶の革", front: "img/binding/cha_front.jpg", back: "img/binding/cha_back.jpg",
+    shelf: "img/binding/cha_shelf.webp", ink: "#ecc873" },
+  { key: "kuro", name: "黒の革", front: "img/binding/kuro_front.jpg", back: "img/binding/kuro_back.jpg",
+    shelf: "img/binding/kuro_shelf.webp", ink: "#e3bf62" },
+  { key: "niji", name: "カラフル", front: "img/binding/niji_front.jpg", back: "img/binding/niji_back.jpg",
+    shelf: "img/binding/niji_shelf.webp", ink: "#2b3140" }
 ];
 function bindingOf(a) {
   var k = a && a.binding;

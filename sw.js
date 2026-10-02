@@ -8,7 +8,7 @@
    ★画面のファイルを直したら必ず下の番号を上げること。js/app.js の BUILD と同じ番号に揃える。
      上げないと、前に置いた古い JS がそのまま出て「直したのに変わらない」になる。
    ═══════════════════════════════════════════════════ */
-var CACHE = "shashincho-v22";
+var CACHE = "shashincho-v23";
 
 var FILES = [
   "./",
@@ -19,6 +19,9 @@ var FILES = [
   "fonts/mincho.woff2",
   "img/binding/kon_front.jpg", "img/binding/kon_back.jpg", "img/binding/kon_shelf.webp",
   "img/binding/aka_front.jpg", "img/binding/aka_back.jpg", "img/binding/aka_shelf.webp",
+  "img/binding/cha_front.jpg", "img/binding/cha_back.jpg", "img/binding/cha_shelf.webp",
+  "img/binding/kuro_front.jpg", "img/binding/kuro_back.jpg", "img/binding/kuro_shelf.webp",
+  "img/binding/niji_front.jpg", "img/binding/niji_back.jpg", "img/binding/niji_shelf.webp",
   "img/shelf/wood_back.jpg", "img/shelf/wood_board.jpg",
   "icons/icon-192.png", "icons/icon-512.png",
   "icons/icon-maskable-192.png", "icons/icon-maskable-512.png",
