@@ -30,7 +30,7 @@ function uid(p) { return (p || "x") + Math.random().toString(36).slice(2, 8); }
 
 /* 版の印。Android の入れ物の中ならそちらの印を、外ならブラウザだと分かるように。
    ★app/build.gradle の versionName と MainActivity.BUILD_MARK と、ここの3つを必ず合わせる */
-var BUILD = "v23";
+var BUILD = "v24";
 function buildMark() {
   try {
     if (window.ShashinCho && ShashinCho.buildMark) return ShashinCho.buildMark();
@@ -2124,9 +2124,36 @@ var Make = (function () {
     }).join("") + '</div>');
 
     if (tab === "page") {
+    /* ★v24＝1ページの組み方を上、見開きを下に。4つの欄はたたんで、開くのは1つずつ（accOpen） */
+    var kumi = '<div class="row two" style="margin-bottom:10px">'
+      + chip("🧩 型で組む", p.mode === "型", "mode-kata")
+      + chip("✋ 自由に置く", p.mode === "自由", "mode-jiyu") + '</div>';
+    if (p.mode === "型") {
+      kumi += '<div class="lay">' + LAYOUTS.map(function (L) {
+        return '<button data-lay="' + L.key + '" class="' + (p.layout === L.key ? "on" : "")
+          + '" title="' + esc(L.name) + '" aria-label="' + esc(L.name) + '">'
+          + L.slots.map(function (s) {
+              return '<i class="' + (s.k === "text" ? "t" : "") + '" style="left:' + s.x
+                + '%;top:' + (s.y * 0.86) + '%;width:' + s.w + '%;height:'
+                + (s.h * 0.86) + '%"></i>';
+            }).join("")
+          + '<span>' + esc(L.name) + '</span></button>';
+      }).join("") + '</div>'
+        + '<h3 class="sub">➕ 足す</h3>' + tiles([["〰️", "飾りの線", 'data-do="add-line"']]);
+    } else {
+      kumi += '<h3 class="sub">➕ 足す</h3>' + tiles([
+        ["🖼️", "写真", 'data-do="add-photo"', "pri"],
+        ["🔤", "文字", 'data-do="add-text"'],
+        ["〰️", "飾りの線", 'data-do="add-line"']]);
+    }
+    var curLay = LAYOUTS.filter(function (L) { return L.key === p.layout; })[0];
+    h.push(acc("kumi", "🧩 このページの組み方",
+      p.mode === "型" ? (curLay ? curLay.name : "型") : "自由に置く", kumi));
+
     var pr = pairOf(pi);
-    h.push('<div class="grp"><h3>📖 見開きをまとめて作る</h3>'
-      + '<p class="note" style="margin:0 0 8px">' + (pr.made
+    h.push(acc("spread", "📖 見開きをまとめて作る",
+      pr.made ? "うしろに2ページ足す" : (pr.L + 1) + "・" + (pr.R + 1) + "ページ目",
+      '<p class="note" style="margin:0 0 8px">' + (pr.made
           ? "1ページ目は右に1枚だけで出るので、うしろに2ページ足して見開きにします。"
           : (pr.L + 1) + "・" + (pr.R + 1) + "ページ目（本を横にしたとき左右に並ぶ2ページ）を、まとめて作ります。")
       + '</p><div class="lay2">' + SPREADS.map(function (sp) {
@@ -2136,42 +2163,18 @@ var Make = (function () {
             + (sp.pano ? '<i class="pano"></i>' : "")
             + '<span class="nm">' + esc(sp.name) + '</span></button>';
         }).join("") + '</div>'
-      + tiles([["👀", "見開きで確かめる", 'data-do="seespread"']]) + '</div>');
-    h.push('<div class="grp"><h3>🧩 組み方（このページだけ）</h3>');
-    h.push('<div class="row two" style="margin-bottom:10px">'
-      + chip("🧩 型で組む", p.mode === "型", "mode-kata")
-      + chip("✋ 自由に置く", p.mode === "自由", "mode-jiyu") + '</div>');
+      + tiles([["👀", "見開きで確かめる", 'data-do="seespread"']])));
 
-    if (p.mode === "型") {
-      h.push('<div class="lay">');
-      LAYOUTS.forEach(function (L) {
-        h.push('<button data-lay="' + L.key + '" class="' + (p.layout === L.key ? "on" : "")
-          + '" title="' + esc(L.name) + '" aria-label="' + esc(L.name) + '">'
-          + L.slots.map(function (s) {
-              return '<i class="' + (s.k === "text" ? "t" : "") + '" style="left:' + s.x
-                + '%;top:' + (s.y * 0.86) + '%;width:' + s.w + '%;height:'
-                + (s.h * 0.86) + '%"></i>';
-            }).join("")
-          + '<span>' + esc(L.name) + '</span></button>');
-      });
-      h.push('</div>');
-      h.push('<h3 class="sub">➕ 足す</h3>' + tiles([["〰️", "飾りの線", 'data-do="add-line"']]));
-    } else {
-      h.push('<h3 class="sub">➕ 足す</h3>' + tiles([
-        ["🖼️", "写真", 'data-do="add-photo"', "pri"],
-        ["🔤", "文字", 'data-do="add-text"'],
-        ["〰️", "飾りの線", 'data-do="add-line"']]));
-    }
-    h.push('</div>');
+    var paper = paperOf(p);
+    h.push(acc("paper", "🎨 台紙の色",
+      '<i class="accsw" style="--c:' + esc(paper) + '"></i>', swatches(PAPERS, paper, "bg"), true));
 
-    h.push('<div class="grp"><h3>🎨 台紙の色</h3>' + swatches(PAPERS, paperOf(p), "bg") + '</div>');
-
-    h.push('<div class="grp"><h3>📄 このページを</h3>' + tiles([
+    h.push(acc("pageop", "📄 このページを", "動かす・複製・外す", tiles([
         ["⬅️", "前へ動かす", 'data-do="up"' + (pi <= 0 ? " disabled" : "")],
         ["➡️", "後ろへ動かす", 'data-do="down"' + (pi >= pages().length - 1 ? " disabled" : "")],
         ["📑", "複製する", 'data-do="dup"'],
         ["🗑️", "外す", 'data-do="delpage"', "bad"]])
-      + '<p class="note">ページを足すのは、下の帯の右端の「＋」です。</p></div>');
+      + '<p class="note">ページを足すのは、下の帯の右端の「＋」です。</p>'));
     }
 
     if (tab === "item" && it) {
@@ -2252,6 +2255,16 @@ var Make = (function () {
   /* ---------- 文字の飾り（縁取り・影・枠と地） ----------
      ★たたんでおける。開いているかどうかは作り直しても覚えておく */
   var openSec = {};
+  /* 「◯ページ目」タブの欄（v24）。見出しだけ並べて、開くのは1つずつ。
+     ★開いている欄は作り直しても覚えておく（パネルは型を選ぶたびに作り直すため）。
+     hint は見出しの右に出す今の状態（たたんでいても何が選ばれているか分かるように） */
+  var accOpen = "kumi";
+  function acc(key, title, hint, body, rawHint) {
+    return '<details class="acc" data-acc="' + key + '"' + (accOpen === key ? " open" : "") + '>'
+      + '<summary><span class="at">' + esc(title) + '</span>'
+      + (hint ? '<span class="ah">' + (rawHint ? hint : esc(hint)) + '</span>' : "")
+      + '</summary><div class="accin">' + body + '</div></details>';
+  }
   function sec(key, title, body, on) {
     return '<details class="sec" data-sec="' + key + '"' + (openSec[key] ? " open" : "") + '>'
       + '<summary>' + esc(title) + (on ? '<b class="dot" aria-label="使用中"></b>' : "") + '</summary>'
@@ -2382,6 +2395,7 @@ var Make = (function () {
         saved();
         $$(".s", b.parentNode).forEach(function (x) { x.classList.remove("on"); });
         b.classList.add("on");
+        if (bg) { var as = $("#panel .accsw"); if (as) as.style.setProperty("--c", bg); }
         fillWindow(); lateStrip();
       };
     });
@@ -2525,6 +2539,18 @@ var Make = (function () {
     });
     $$("#panel details.sec").forEach(function (d) {
       d.ontoggle = function () { openSec[d.getAttribute("data-sec")] = d.open; };
+    });
+    /* 1つ開いたら他はたたむ。開いた見出しが画面の外なら見える所まで寄せる */
+    $$("#panel details.acc").forEach(function (d) {
+      d.ontoggle = function () {
+        var k = d.getAttribute("data-acc");
+        if (d.open) {
+          accOpen = k;
+          $$("#panel details.acc").forEach(function (x) { if (x !== d) x.open = false; });
+          var s = d.querySelector("summary");
+          setTimeout(function () { s.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, 0);
+        } else if (accOpen === k) accOpen = null;
+      };
     });
 
     /* ★打っている最中・つまみを動かしている最中は、誌面を作り直さない。

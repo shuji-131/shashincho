@@ -657,6 +657,33 @@ details.sec .secin{padding:0 10px 10px}
 details.sec{background:var(--tile);border:1.5px solid var(--tile-line);border-radius:10px}
 details.sec > summary{padding:12px;font-size:13px;font-weight:700;color:var(--tile-ink)}
 
+/* 「◯ページ目」タブの欄（v24）。見出しの札だけ並べて、押すと開く（1つずつ） */
+details.acc{
+  background:var(--tile);border:1.5px solid var(--tile-line);border-radius:12px;
+  margin:0 0 10px;box-shadow:0 1px 3px rgba(0,0,0,.14);
+}
+details.acc[open]{border-color:var(--accent)}
+details.acc > summary{
+  list-style:none;display:flex;align-items:center;gap:8px;cursor:pointer;
+  min-height:54px;padding:10px 12px;color:var(--tile-ink);scroll-margin-top:84px;
+}
+details.acc > summary::-webkit-details-marker{display:none}
+details.acc > summary .at{font-size:14px;font-weight:700;flex:1 1 auto;min-width:0}
+details.acc > summary .ah{
+  font-size:11.5px;color:var(--ui-2);white-space:nowrap;max-width:48%;
+  overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto;
+}
+details.acc > summary::after{
+  content:"▾";flex:0 0 auto;font-size:15px;color:var(--ui-2);transition:transform .15s;
+}
+details.acc[open] > summary::after{transform:rotate(180deg);color:var(--accent)}
+details.acc .accin{padding:2px 12px 12px;border-top:1px solid var(--tile-line)}
+details.acc .accin > :first-child{margin-top:10px}
+.accsw{
+  display:inline-block;width:18px;height:18px;border-radius:50%;vertical-align:middle;
+  background:var(--c);border:1.5px solid var(--tile-line);
+}
+
 /* 使い方の案内 */
 .guide{text-align:center;padding:14px 6px}
 .guide .big-ico{font-size:40px;display:block;margin-bottom:6px}
