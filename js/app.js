@@ -30,7 +30,7 @@ function uid(p) { return (p || "x") + Math.random().toString(36).slice(2, 8); }
 
 /* 版の印。Android の入れ物の中ならそちらの印を、外ならブラウザだと分かるように。
    ★app/build.gradle の versionName と MainActivity.BUILD_MARK と、ここの3つを必ず合わせる */
-var BUILD = "v25";
+var BUILD = "v26";
 function buildMark() {
   try {
     if (window.ShashinCho && ShashinCho.buildMark) return ShashinCho.buildMark();
@@ -2123,12 +2123,17 @@ var Make = (function () {
         if (sel !== it.id) panId = null;
         sel = it.id; fillWindow(true); drawPanel();
       };
-      /* 「写真の位置を合わせる」の間は、枠ではなく中の写真を動かす */
-      if (it.id === sel && panId === it.id && it.kind === "photo" && it.photo) {
+      /* 「写真の位置を合わせる」の間は、枠ではなく中の写真を動かす。
+         ★v25 選んだ写真は、ボタンを押さなくても2本指で中の写真を大きく・小さくできる。
+           型のページ（枠が動かない）は1本指で中の写真を動かす。
+           自由配置のページは1本指＝枠ごと動かす（今まで通り）、2本指＝中の写真 */
+      var selPhoto = it.id === sel && it.kind === "photo" && it.photo;
+      if (selPhoto && (panId === it.id || !movable)) {
         b.classList.add("pan");
         bindPan(b, it, box);
       } else if (movable) {
         bindMove(b, it, box);
+        if (selPhoto) { b.classList.add("pinch"); bindPan(b, it, box, true); }
         if (it.id === sel) ["nw", "ne", "sw", "se"].forEach(function (c) {
           var hd = document.createElement("i");
           hd.className = "hand " + c;
@@ -2145,6 +2150,7 @@ var Make = (function () {
      1本指で動かす／2本指で広げる・つまむ／ホイールで大きさ。
      ★動かしている間は作り直さず、img の書式だけ書き換える（指について来るように） */
   var panId = null;
+  var pinching = false;   /* 2本指で中の写真を拡大している最中（枠を動かす処理を止める印） */
   function resetPos(it) { delete it.px; delete it.py; delete it.pz; }
   function photoImg(it) {
     var n = onPage(it);
@@ -2154,7 +2160,8 @@ var Make = (function () {
     var im = photoImg(it);
     if (im) im.style.cssText = imgCss(it);
   }
-  function bindPan(node, it, box) {
+  /* pinchOnly＝2本指の時だけ働く（自由配置の写真。1本指は bindMove が枠を動かす） */
+  function bindPan(node, it, box, pinchOnly) {
     var pts = {}, st = null;
     function n() { return Object.keys(pts).length; }
     function begin() {
@@ -2185,13 +2192,16 @@ var Make = (function () {
       return Math.abs(room) < 0.5 ? 0 : dx / room * 100;
     }
     node.addEventListener("pointerdown", function (e) {
+      if (e.target.classList.contains("hand")) return;
       e.preventDefault();
       pts[e.pointerId] = { x: e.clientX, y: e.clientY };
       try { node.setPointerCapture(e.pointerId); } catch (err) {}
-      st = begin();
+      st = (!pinchOnly || n() > 1) ? begin() : null;
+      if (pinchOnly && st) pinching = true;
     });
     node.addEventListener("pointermove", function (e) {
       if (!pts[e.pointerId] || !st) return;
+      if (pinchOnly && n() < 2) return;
       pts[e.pointerId] = { x: e.clientX, y: e.clientY };
       var c = mid();
       it.pz = st.z;
@@ -2207,9 +2217,14 @@ var Make = (function () {
       applyPos(it); syncSliders(it);
     });
     var up = function (e) {
+      if (!(e.pointerId in pts)) return;
       delete pts[e.pointerId];
-      st = n() ? begin() : null;           /* 指が1本残ったら、そこから続けて動かせるように */
-      if (!n()) { saved(); lateStrip(); setTimeout(function () { dragging = false; }, 60); }
+      /* 指が1本残ったら、そこから続けて動かせるように（2本指だけの時は、そこで止める） */
+      st = n() && (!pinchOnly || n() > 1) ? begin() : null;
+      if (!n()) {
+        pinching = false;
+        saved(); lateStrip(); setTimeout(function () { dragging = false; }, 60);
+      }
     };
     node.addEventListener("pointerup", up);
     node.addEventListener("pointercancel", up);
@@ -2253,6 +2268,8 @@ var Make = (function () {
       sel = it.id;
       try { node.setPointerCapture(e.pointerId); } catch (err) {}
       var mv = function (ev) {
+        if (pinching) st.stop = true;
+        if (st.stop) return;
         var dx = (ev.clientX - st.px) / r.width * 100;
         var dy = (ev.clientY - st.py) / r.height * 100;
         if (!st.moved && Math.abs(dx) + Math.abs(dy) < 0.8) return;
@@ -2414,7 +2431,8 @@ var Make = (function () {
           ["↩️", "位置を戻す", 'data-do="pos-reset"']] : [])));
         if (it.photo) {
           var q = photoPos(it);
-          if (on) h.push('<p class="note">枠の中の写真を指で動かせます。2本指で広げると大きく、つまむと小さくなります（PCはホイール）。</p>');
+          if (on || p.mode !== "自由") h.push('<p class="note">枠の中の写真を指で動かせます。2本指で広げると大きく、つまむと小さくなります（PCはホイール）。ページを移る時は写真の外か、下のページ帯で。</p>');
+          else h.push('<p class="note">2本指で広げると、枠の中の写真が大きく、つまむと小さくなります（PCはホイール）。1本指は枠ごと動かします。</p>');
           h.push(rng("pz", "🔍 大きさ", 1, 4, 0.05, q.z, "倍"));
           h.push(rng("px", "↔️ 横の位置", 0, 100, 1, q.x, "%"));
           h.push(rng("py", "↕️ 縦の位置", 0, 100, 1, q.y, "%"));
