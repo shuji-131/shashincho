@@ -8,7 +8,7 @@
    ★画面のファイルを直したら必ず下の番号を上げること。js/app.js の BUILD と同じ番号に揃える。
      上げないと、前に置いた古い JS がそのまま出て「直したのに変わらない」になる。
    ═══════════════════════════════════════════════════ */
-var CACHE = "shashincho-v24";
+var CACHE = "shashincho-v25";
 
 var FILES = [
   "./",
@@ -22,6 +22,22 @@ var FILES = [
   "img/binding/cha_front.jpg", "img/binding/cha_back.jpg", "img/binding/cha_shelf.webp",
   "img/binding/kuro_front.jpg", "img/binding/kuro_back.jpg", "img/binding/kuro_shelf.webp",
   "img/binding/niji_front.jpg", "img/binding/niji_back.jpg", "img/binding/niji_shelf.webp",
+  /* 本の形ごとの装丁（v25・img/make_shapes.py） */
+  "img/binding/kon_sq_front.jpg", "img/binding/kon_sq_back.jpg", "img/binding/kon_sq_shelf.webp",
+  "img/binding/kon_yoko_front.jpg", "img/binding/kon_yoko_back.jpg", "img/binding/kon_yoko_shelf.webp",
+  "img/binding/kon_a_front.jpg", "img/binding/kon_a_back.jpg", "img/binding/kon_a_shelf.webp",
+  "img/binding/aka_sq_front.jpg", "img/binding/aka_sq_back.jpg", "img/binding/aka_sq_shelf.webp",
+  "img/binding/aka_yoko_front.jpg", "img/binding/aka_yoko_back.jpg", "img/binding/aka_yoko_shelf.webp",
+  "img/binding/aka_a_front.jpg", "img/binding/aka_a_back.jpg", "img/binding/aka_a_shelf.webp",
+  "img/binding/cha_sq_front.jpg", "img/binding/cha_sq_back.jpg", "img/binding/cha_sq_shelf.webp",
+  "img/binding/cha_yoko_front.jpg", "img/binding/cha_yoko_back.jpg", "img/binding/cha_yoko_shelf.webp",
+  "img/binding/cha_a_front.jpg", "img/binding/cha_a_back.jpg", "img/binding/cha_a_shelf.webp",
+  "img/binding/kuro_sq_front.jpg", "img/binding/kuro_sq_back.jpg", "img/binding/kuro_sq_shelf.webp",
+  "img/binding/kuro_yoko_front.jpg", "img/binding/kuro_yoko_back.jpg", "img/binding/kuro_yoko_shelf.webp",
+  "img/binding/kuro_a_front.jpg", "img/binding/kuro_a_back.jpg", "img/binding/kuro_a_shelf.webp",
+  "img/binding/niji_sq_front.jpg", "img/binding/niji_sq_back.jpg", "img/binding/niji_sq_shelf.webp",
+  "img/binding/niji_yoko_front.jpg", "img/binding/niji_yoko_back.jpg", "img/binding/niji_yoko_shelf.webp",
+  "img/binding/niji_a_front.jpg", "img/binding/niji_a_back.jpg", "img/binding/niji_a_shelf.webp",
   "img/shelf/wood_back.jpg", "img/shelf/wood_board.jpg",
   "icons/icon-192.png", "icons/icon-512.png",
   "icons/icon-maskable-192.png", "icons/icon-maskable-512.png",

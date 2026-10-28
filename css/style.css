@@ -99,6 +99,10 @@ main{flex:1;min-height:0;position:relative}
   position:relative; background:var(--paper); overflow:hidden;
   container-type:size; aspect-ratio:var(--ratio,3/4);
   font-family:var(--gothic); color:var(--ink);
+  /* 字の大きさの単位（v25）。幅と高さの短い側で決める＝縦長(3:4)では 1cqw と同じ。
+     横長・正方形のページで字が大きくなりすぎて枠からあふれないように。
+     ★js の CU()・PdfOut の cu と同じ式。中の要素で解決されるので .page の中でだけ使える */
+  --cu:min(1cqw, .75cqh);
 }
 .it{position:absolute;overflow:hidden}
 .it.ph{background:#0000000d}
@@ -109,12 +113,12 @@ main{flex:1;min-height:0;position:relative}
 .it.ph.f-fuchi{padding:1.6cqw;background:#fff;box-shadow:0 .4cqw 1.4cqw rgba(0,0,0,.18)}
 .it.ph .none{
   width:100%;height:100%;display:flex;align-items:center;justify-content:center;
-  border:1px dashed var(--line); color:#a69e90; font-size:3.4cqw; letter-spacing:.1em;
+  border:1px dashed var(--line); color:#a69e90; font-size:calc(3.4 * var(--cu)); letter-spacing:.1em;
   background:repeating-linear-gradient(45deg,#00000005 0 8px,#0000 8px 16px);
 }
 .it.tx{
   display:flex; flex-direction:column; justify-content:center;
-  font-size:4.2cqw; line-height:1.75; white-space:pre-wrap; word-break:break-word;
+  font-size:calc(4.2 * var(--cu)); line-height:1.75; white-space:pre-wrap; word-break:break-word;
 }
 .it.tx.mincho{font-family:var(--mincho)}
 /* 字の本体。枠の絵（.deco）より手前に出す */
@@ -124,19 +128,19 @@ main{flex:1;min-height:0;position:relative}
 .it.ln{overflow:visible}
 .it.tx.futo{font-weight:700}
 /* 明るい文字は写真の上で消える。うっすら影を敷いて拾えるようにする */
-.it.tx.glow{text-shadow:0 .2cqw .8cqw rgba(0,0,0,.55)}
+.it.tx.glow{text-shadow:0 calc(.2 * var(--cu)) calc(.8 * var(--cu)) rgba(0,0,0,.55)}
 /* 表紙・裏表紙（装丁）。題名の書式は js の COVER_T と PdfOut.drawCover に合わせる */
 .page.cover{background-size:100% 100%;background-repeat:no-repeat;background-color:#2b2f36}
 .page.cover .ctitle{
   position:absolute;left:15%;width:70%;top:46%;transform:translateY(-50%);
   text-align:center;font-family:var(--mincho);font-weight:700;
-  font-size:6.6cqw;line-height:1.5;letter-spacing:.12em;
+  font-size:calc(6.6 * var(--cu));line-height:1.5;letter-spacing:.12em;
   white-space:pre-wrap;word-break:break-word;
-  text-shadow:0 .3cqw .5cqw rgba(0,0,0,.6);
+  text-shadow:0 calc(.3 * var(--cu)) calc(.5 * var(--cu)) rgba(0,0,0,.6);
 }
 .page .nom{
-  position:absolute;bottom:2.2cqw;left:0;right:0;text-align:center;
-  font-size:2.6cqw;letter-spacing:.2em;font-family:var(--mincho);
+  position:absolute;bottom:calc(2.2 * var(--cu));left:0;right:0;text-align:center;
+  font-size:calc(2.6 * var(--cu));letter-spacing:.2em;font-family:var(--mincho);
   pointer-events:none;
 }
 
@@ -400,7 +404,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .lay{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
 .lay button{
   border:1px solid var(--ui-line);background:var(--ground);border-radius:4px;
-  padding:0;cursor:pointer;aspect-ratio:3/4;position:relative;overflow:hidden;
+  padding:0;cursor:pointer;aspect-ratio:var(--ratio,3/4);position:relative;overflow:hidden;
 }
 .lay button.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 .lay i{position:absolute;background:var(--ui-2);border-radius:1px;display:block}
@@ -413,7 +417,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
   background:transparent;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;
   color:var(--ui-2);font-size:10px;line-height:1.3}
 .binds .bd.on{border-color:var(--accent);color:var(--ui);box-shadow:0 0 0 1px var(--accent)}
-.binds .bd img,.binds .bd i{width:100%;height:auto;aspect-ratio:3/4;object-fit:cover;display:flex;
+.binds .bd img,.binds .bd i{width:100%;height:auto;aspect-ratio:var(--ratio,3/4);object-fit:cover;display:flex;
   align-items:center;justify-content:center;border-radius:2px;font-style:normal;font-size:10px;
   background:rgba(128,128,128,.15)}
 .fld{font-size:11px;color:var(--ui-2);margin:8px 0 3px;display:block}
@@ -471,7 +475,7 @@ details.sec .secin{padding:0 10px 10px}
   font-weight:400;font-variant-numeric:tabular-nums;
 }
 #pages .add{
-  flex:0 0 auto;width:46px;aspect-ratio:3/4;border:1.5px dashed var(--ui-line);
+  flex:0 0 auto;width:46px;aspect-ratio:var(--ratio,3/4);border:1.5px dashed var(--ui-line);
   border-radius:3px;background:transparent;color:var(--ui-2);font-size:18px;cursor:pointer;
 }
 
@@ -837,3 +841,24 @@ textarea,input[type=text]{font-size:16px}
 .catrow button{width:40px;height:38px;border-radius:8px;border:1.5px solid var(--tile-line);background:transparent;cursor:pointer;font-size:16px}
 .catrow button.bad{border-color:#c4674c;background:var(--bad-bg)}
 .catrow button:disabled{opacity:.3}
+
+/* 本の形を選ぶ窓（v25）。比のとおりの四角を見本にした大きなタイル */
+.shapes{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:12px}
+.shapes button{
+  border:1.5px solid var(--tile-line,var(--ui-line));background:var(--tile,transparent);border-radius:8px;
+  padding:10px 6px 8px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;
+  color:var(--tile-ink);font:inherit;min-height:118px;justify-content:flex-end
+}
+.shapes button.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.shapes i{display:block;background:var(--paper);border:1px solid rgba(0,0,0,.25);
+  box-shadow:0 3px 6px rgba(0,0,0,.25);margin-bottom:4px}
+.shapes b{font-size:14px;font-weight:700}
+.shapes small{font-size:11px;color:var(--ui-2)}
+.shapes small.now{color:var(--accent);font-weight:700}
+
+/* 見る画面のズーム（v25）。拡大している間は、はらってもめくれず写真を動かす */
+#stage{position:relative}
+#stage .zoomer{transform-origin:0 0}
+/* ★拡大した紙が上の見出し・下の操作に重ならないよう、拡大中だけ切る（めくりの立体はふだん切らない） */
+#stage.zoomed{cursor:grab;overflow:hidden}
+#zoomout{position:absolute;right:12px;top:10px;z-index:8}

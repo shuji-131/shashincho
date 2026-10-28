@@ -30,7 +30,7 @@ function uid(p) { return (p || "x") + Math.random().toString(36).slice(2, 8); }
 
 /* 版の印。Android の入れ物の中ならそちらの印を、外ならブラウザだと分かるように。
    ★app/build.gradle の versionName と MainActivity.BUILD_MARK と、ここの3つを必ず合わせる */
-var BUILD = "v24";
+var BUILD = "v25";
 function buildMark() {
   try {
     if (window.ShashinCho && ShashinCho.buildMark) return ShashinCho.buildMark();
@@ -56,7 +56,39 @@ function fitBox(area, box, ratio) {
   box.style.height = Math.floor(h) + "px";
   box.style.width = Math.floor(h * ratio) + "px";
 }
-var RATIO = 3 / 4;   /* ページ1枚の縦横比。判型を選べるようにするならここ */
+/* 1枚を見開きいっぱいに出す時の寄せと大きさ（説明は Make.panoPos）。r＝ページの縦横比 */
+function panoAt(a, side, r) {
+  if (a >= 2 * r) {
+    return { z: 1, y: 50, x: side === "L" ? 50 * (2 * r - a) / (r - a) : 50 * a / (a - r) };
+  }
+  return { z: 2 * r / Math.max(r, a), y: 50, x: side === "L" ? 0 : 100 };
+}
+/* 本の形（判型）。本ごとに a.shape で持つ（無ければ縦長＝v24までの本）。
+   r＝ページ1枚の縦横比（幅÷高さ）、mm＝PDFの紙の大きさ。
+   ★表紙の絵は形ごとに img/make_shapes.py で作る（比を変えたら作り直す） */
+var SHAPES = [
+  { key: "tate", name: "縦長",   icon: "📕", r: 3 / 4,     mm: [150, 200], note: "いまの形（3：4）" },
+  { key: "sq",   name: "正方形", icon: "🟦", r: 1,         mm: [180, 180], note: "1：1" },
+  { key: "yoko", name: "横長",   icon: "📖", r: 4 / 3,     mm: [200, 150], note: "4：3" },
+  { key: "a",    name: "A判",    icon: "📄", r: 148 / 210, mm: [148, 210], note: "A4・A5と同じ形" }
+];
+function shapeOf(a) {
+  var k = a && a.shape;
+  for (var i = 0; i < SHAPES.length; i++) if (SHAPES[i].key === k) return SHAPES[i];
+  return SHAPES[0];
+}
+/* ページ1枚の縦横比。★開いている本の形に合わせて useShape が書き換える */
+var RATIO = 3 / 4;
+function useShape(a) {
+  RATIO = shapeOf(a).r;
+  document.documentElement.style.setProperty("--ratio", String(RATIO));
+}
+/* 別の本の形で一時的に描く（本棚・PDF）。終わったら元の形に戻す */
+function inShape(a, fn) {
+  var keep = RATIO;
+  RATIO = shapeOf(a).r;
+  try { return fn(); } finally { RATIO = keep; }
+}
 
 /* =========================================================
    ページの型
@@ -850,18 +882,20 @@ function edgeInk(it, real) {
 }
 function textInk(it, paper) { var c = inkOf(it); return c === "auto" ? autoInk(paper) : c; }
 
+/* 字の大きさの単位（v25）。n 個分を CSS で。★式は style.css の --cu と PdfOut の cu に合わせる */
+function CU(n) { return "calc(" + f2(n) + " * var(--cu))"; }
 /* 文字の枠そのものに付く書式（位置以外）。itemHTML と、動かしている最中の live() で共用 */
 function textCss(it, paper) {
   var pad = boxPad(it);
-  return "text-align:" + (it.align || "left") + ";font-size:" + (4.2 * (it.size || 1)) + "cqw;"
+  return "text-align:" + (it.align || "left") + ";font-size:" + CU(4.2 * (it.size || 1)) + ";"
     + "color:" + textInk(it, paper) + ";" + (pad ? "padding:" + pad + "cqw;" : "");
 }
 /* 字そのものに付く書式（縁取りと影） */
 function glyphCss(it, real) {
   var s = "", sh = shadowOf(it, real);
-  s += "text-shadow:" + (sh ? sh.dx + "cqw " + sh.dy + "cqw " + sh.blur + "cqw " + sh.color : "none") + ";";
+  s += "text-shadow:" + (sh ? CU(sh.dx) + " " + CU(sh.dy) + " " + CU(sh.blur) + " " + sh.color : "none") + ";";
   if (it.olW > 0) {
-    s += "-webkit-text-stroke:" + f2(it.olW * 2) + "cqw " + edgeInk(it, real) + ";paint-order:stroke fill;";
+    s += "-webkit-text-stroke:" + CU(it.olW * 2) + " " + edgeInk(it, real) + ";paint-order:stroke fill;";
   }
   return s;
 }
@@ -941,6 +975,12 @@ function bindingOf(a) {
   for (var i = 0; i < BINDINGS.length; i++) if (BINDINGS[i].key === k) return BINDINGS[i];
   return null;
 }
+/* 装丁の絵（part＝front／back／shelf）。縦長以外は形ごとの絵（img/make_shapes.py） */
+function bindImg(a, part) {
+  var b = bindingOf(a), s = shapeOf(a).key;
+  if (!b) return "";
+  return s === "tate" ? b[part] : b[part].replace("_" + part, "_" + s + "_" + part);
+}
 /* 見る画面とPDFで使う並び。装丁があれば前後に表紙・裏表紙を足す */
 function readSeq(a) {
   var b = bindingOf(a), pg = (a && a.pages) || [];
@@ -952,7 +992,7 @@ var COVER_T = { size: 6.6, lh: 1.5, ls: 0.12, top: 46, width: 70 };
 function coverHTML(a, side) {
   var b = bindingOf(a);
   if (!b) return '<div class="page blank"></div>';
-  return '<div class="page cover" style="background-image:url(\'' + (side === "back" ? b.back : b.front) + '\')">'
+  return '<div class="page cover" style="background-image:url(\'' + bindImg(a, side === "back" ? "back" : "front") + '\')">'
     + (side === "front" && a.title
         ? '<div class="ctitle" style="color:' + b.ink + '">' + esc(a.title) + '</div>' : "")
     + '</div>';
@@ -1131,6 +1171,50 @@ function askName(title, value, okLabel) {
   });
 }
 
+/* 本の形を選ぶ窓。形の見本（比のとおりの四角）を大きなタイルで並べる。返すのは形の key か null */
+function askShape(title, body, now) {
+  return new Promise(function (done) {
+    var w = document.createElement("div");
+    w.className = "modal";
+    w.innerHTML = '<div class="box"><h3>' + esc(title) + '</h3>'
+      + (body ? '<p>' + esc(body).split(NL).join("<br>") + '</p>' : "")
+      + '<div class="shapes">' + SHAPES.map(function (s) {
+          var h = 54, wd = Math.round(h * s.r);
+          if (wd > 64) { wd = 64; h = Math.round(wd / s.r); }
+          return '<button type="button" data-shape="' + s.key + '" class="' + (s.key === now ? "on" : "") + '">'
+            + '<i style="width:' + wd + 'px;height:' + h + 'px"></i>'
+            + '<b>' + s.icon + ' ' + esc(s.name) + '</b><small>' + esc(s.note) + '</small>'
+            + (s.key === now ? '<small class="now">いまの形</small>' : "")
+            + '</button>';
+        }).join("") + '</div>'
+      + '<button class="big ghost" id="no">やめる</button></div>';
+    w.onclick = function (e) { if (e.target === w) { w.remove(); done(null); } };
+    $$("[data-shape]", w).forEach(function (b) {
+      b.onclick = function () { w.remove(); done(b.getAttribute("data-shape")); };
+    });
+    $("#no", w).onclick = function () { w.remove(); done(null); };
+    document.body.appendChild(w);
+  });
+}
+/* 本の形を変える。★見開きいっぱいの写真は、形で寄せ方が変わるので計算し直す */
+function setShape(a, key) {
+  if (key === "tate") delete a.shape; else a.shape = key;
+  if (App.album() === a) useShape(a);
+  var r = shapeOf(a).r, jobs = [];
+  (a.pages || []).forEach(function (p) {
+    (p.items || []).forEach(function (x) {
+      if (!x.pg || !x.photo || !x.side) return;
+      jobs.push(Photos.get(x.photo).then(function (src) { return src && loadImg(src); }).then(function (img) {
+        if (!img) return;
+        var q = panoAt(img.naturalWidth / img.naturalHeight, x.side, r);
+        x.px = Math.round(q.x * 100) / 100; x.py = q.y; x.pz = Math.round(q.z * 1000) / 1000;
+      }).catch(function () {}));
+    });
+  });
+  Store.touch(a);
+  return Promise.all(jobs).then(function () { Store.touch(a); });
+}
+
 /* =========================================================
    種類（本棚の分類）。名前の並びだけを持つ。本は a.cat に名前を持つ
    ★本のファイル（渡す）には入れない。種類は持ち主ごとのもの
@@ -1238,12 +1322,12 @@ var Shelf = (function () {
   /* 1冊の本（表紙）。★題名は表紙に載せない（名札に出す） */
   function bookFace(a) {
     var bd = bindingOf(a);
-    if (bd) return '<img class="leather" src="' + bd.shelf + '" alt="">';
+    if (bd) return '<img class="leather" src="' + bindImg(a, "shelf") + '" alt="">';
     var p0 = (a.pages || [])[0];
     return '<span class="cloth" style="--cl:' + clothOf(a) + '">'
       + '<i class="spine"></i>'
       /* 背を除いた表紙いっぱいに、1ページ目をそのまま描く（見る画面と同じ描き方） */
-      + (p0 ? '<span class="face">' + pageHTML(p0, 0) + '</span>' : '<span class="emb">帖</span>')
+      + (p0 ? '<span class="face">' + inShape(a, function () { return pageHTML(p0, 0); }) + '</span>' : '<span class="emb">帖</span>')
       + '</span>';
   }
   /* 1段に何冊並べるか。画面の幅から決める（1冊の幅は 96〜150px） */
@@ -1267,7 +1351,9 @@ var Shelf = (function () {
   }
   function cell(a) {
     return '<div class="bk' + (sorting ? " sorting" : "") + '">'
-      + '<button class="book" data-open="' + a.id + '" aria-label="' + esc(a.title || "無題") + 'を開く">'
+      /* 本の高さは形で変わる（幅はそろえる。横長の本は低く、A判は少し高い） */
+      + '<button class="book" data-open="' + a.id + '" style="height:calc(var(--bh) * ' + f2(0.75 / shapeOf(a).r) + ')"'
+      + ' aria-label="' + esc(a.title || "無題") + 'を開く">'
       + bookFace(a) + '</button>'
       + (sorting ? '<span class="mv"><button data-mv="-1" data-id="' + a.id + '" aria-label="前へ">◀</button>'
                  + '<button data-mv="1" data-id="' + a.id + '" aria-label="後ろへ">▶</button></span>' : "")
@@ -1375,9 +1461,15 @@ var Shelf = (function () {
     if ($("#iosuse")) $("#iosuse").onclick = function () { Ios.guide(); };
     $$("#shelf [data-new]").forEach(function (b) {
       b.onclick = function () {
-        askName("新しいアルバム", "", "作る").then(function (name) {
-          if (!name) return;
+        var name = null;
+        askName("新しいアルバム", "", "次へ").then(function (n) {
+          if (!n) return null;
+          name = n;
+          return askShape("本の形を選ぶ", "あとから本棚の「…」→「📐 本の形」で変えられます。", null);
+        }).then(function (k) {
+          if (!name || !k) return;
           var a = { title: name, pages: [page("door", "生成", [name])] };
+          if (k !== "tate") a.shape = k;
           /* 種類で絞って見ている時は、その種類に入れて作る */
           if (filter) a.cat = filter;
           a = Store.add(a);
@@ -1385,6 +1477,16 @@ var Shelf = (function () {
         });
       };
     });
+  }
+  /* 「…」→ 本の形。★作ったあとに変えると、枠は％のまま伸び縮みする＝写真の見え方が変わる */
+  function changeShape(a) {
+    var used = (a.pages || []).some(function (p) { return (p.items || []).some(function (x) { return x.photo || x.text; }); });
+    return askShape("📐 本の形", used ? "変えると、写真や文字の枠もページに合わせて伸び縮みします。" + NL
+        + "写真の見える範囲が変わったり、文字があふれたりすることがあるので、変えたあと見直してください。" : "", shapeOf(a).key)
+      .then(function (k) {
+        if (!k || k === shapeOf(a).key) return;
+        return setShape(a, k).then(function () { toast("本の形を「" + shapeOf(a).name + "」にしました"); });
+      });
   }
   /* 「…」→ 種類を決める */
   function pickCat(a) {
@@ -1454,6 +1556,7 @@ var Shelf = (function () {
       { label: "✏️ 編集する", kind: "", value: "edit" },
       { label: "名前を変える", value: "rename" },
       { label: "表紙のデザイン", value: "binding" },
+      { label: "📐 本の形（いまは" + shapeOf(a).name + "）", value: "shape" },
       { label: "PDFにする", value: "pdf" },
       { label: "1冊のファイルにする（渡す）", value: "file" },
       { label: "🏷️ 種類を決める", value: "cat" },
@@ -1465,6 +1568,7 @@ var Shelf = (function () {
       if (v === "pdf") return PdfOut.start(a);
       if (v === "file") return BookFile.start(a);
       if (v === "cat") return pickCat(a);
+      if (v === "shape") return changeShape(a).then(render);
       if (v === "binding") {
         return ask("表紙のデザイン", "選ぶと、表紙と裏表紙が対になって付きます。" + NL
           + "見る画面とPDFの最初と最後に出ます（ページの数には入りません）。",
@@ -1504,7 +1608,7 @@ var Shelf = (function () {
       }
     });
   }
-  return { render: render };
+  return { render: render, changeShape: changeShape };
 })();
 
 /* =========================================================
@@ -1512,6 +1616,110 @@ var Shelf = (function () {
    ========================================================= */
 var Read = (function () {
   var idx = 0, sp = 0, busy = false, manual = null, el = {};
+
+  /* ---------- ズーム（v25） ----------
+     2本指で広げる・つまむ／ダブルタップで2.5倍⇔元の大きさ／PCはホイール。
+     拡大している間は、1本指ではらうと写真を動かす（めくらない）。
+     ★動かすのは #tate／#yoko の箱ごと（紙を作り直さない＝めくりの仕組みに触らない）。
+       めくる時・描き直す時は必ず元の大きさに戻す */
+  var Z = (function () {
+    var z = 1, tx = 0, ty = 0, pts = {}, pinch = null, pan = null, tap = null;
+    function box() { return $("#stage > #tate") || $("#stage > #yoko"); }
+    function count() { return Object.keys(pts).length; }
+    function at(e) {
+      var b = box(), r = $("#stage").getBoundingClientRect();
+      return { x: e.clientX - r.left - b.offsetLeft, y: e.clientY - r.top - b.offsetTop };
+    }
+    function paint() {
+      var b = box();
+      if (!b) return;
+      var W = b.offsetWidth, H = b.offsetHeight;
+      z = Math.max(1, Math.min(5, z));
+      tx = Math.max(W - W * z, Math.min(0, tx));
+      ty = Math.max(H - H * z, Math.min(0, ty));
+      b.classList.add("zoomer");
+      b.style.transform = z === 1 ? "" : "translate(" + tx + "px," + ty + "px) scale(" + z + ")";
+      $("#stage").classList.toggle("zoomed", z > 1);
+      var out = $("#zoomout");
+      if (z > 1 && !out) {
+        $("#stage").insertAdjacentHTML("beforeend", '<button class="mini" id="zoomout">🔍 元の大きさ</button>');
+        $("#zoomout").onclick = function (e) { e.stopPropagation(); reset(); };
+      } else if (z === 1 && out) out.remove();
+    }
+    /* 点 p（箱の中の位置）を動かさずに nz 倍にする */
+    function zoomAt(p, nz) {
+      var cx = (p.x - tx) / z, cy = (p.y - ty) / z;
+      z = Math.max(1, Math.min(5, nz));
+      tx = p.x - cx * z; ty = p.y - cy * z;
+      if (z < 1.04) { z = 1; tx = ty = 0; }
+      paint();
+    }
+    function reset() { z = 1; tx = ty = 0; pinch = pan = null; paint(); }
+    function two() {
+      var k = Object.keys(pts), a = pts[k[0]], b = pts[k[1]];
+      return { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, m: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
+    }
+    function down(e) {
+      if (!box()) return;
+      pts[e.pointerId] = at(e);
+      if (count() === 2 && !busy) {
+        var t = two();
+        pinch = { d: t.d, m: t.m, z: z, tx: tx, ty: ty };
+        pan = null; tap = null;
+      } else if (count() === 1 && z > 1) {
+        pan = { p: pts[e.pointerId], tx: tx, ty: ty };
+      }
+    }
+    function move(e) {
+      if (!(e.pointerId in pts)) return;
+      pts[e.pointerId] = at(e);
+      if (pinch && count() >= 2) {
+        var t = two(), nz = Math.max(1, Math.min(5, pinch.z * t.d / pinch.d));
+        /* 指の間の点が、つまみ始めに指していた紙の所に来るように */
+        var cx = (pinch.m.x - pinch.tx) / pinch.z, cy = (pinch.m.y - pinch.ty) / pinch.z;
+        z = nz; tx = t.m.x - cx * z; ty = t.m.y - cy * z;
+        paint();
+      } else if (pan) {
+        var q = pts[e.pointerId];
+        tx = pan.tx + q.x - pan.p.x; ty = pan.ty + q.y - pan.p.y;
+        paint();
+      }
+    }
+    function up(e) {
+      var q = pts[e.pointerId];
+      delete pts[e.pointerId];
+      if (pinch) {
+        if (count() < 2) {
+          pinch = null;
+          if (z < 1.04) reset();
+          /* 残った1本の指で、そのまま動かせるように */
+          var k = Object.keys(pts)[0];
+          if (k != null && z > 1) pan = { p: pts[k], tx: tx, ty: ty };
+        }
+        return;
+      }
+      pan = null;
+      /* ダブルタップ。★動いた指（はらい）は数えない */
+      if (!q || busy) return;
+      var now = Date.now(), moved = e.type === "pointercancel";
+      if (tap && !moved && now - tap.t < 320 && Math.hypot(q.x - tap.x, q.y - tap.y) < 30) {
+        tap = null;
+        if (z > 1) reset(); else zoomAt(q, 2.5);
+        return;
+      }
+      tap = moved ? null : { t: now, x: q.x, y: q.y };
+    }
+    function wheel(e) {
+      if (busy || !box()) return;
+      e.preventDefault();
+      zoomAt(at(e), z * (e.deltaY < 0 ? 1.15 : 1 / 1.15));
+    }
+    return { down: down, move: move, up: up, wheel: wheel, reset: reset,
+             /* 拡大中・つまんでいる最中は、めくりの処理を止める */
+             on: function () { return z > 1 || !!pinch || count() > 1; },
+             /* はらいの途中で指が動いたら、ダブルタップの候補から外す */
+             moved: function () { tap = null; } };
+  })();
 
   function A() { return App.album(); }
   /* ★見る画面の並びは readSeq（装丁があれば 表紙＋ページ＋裏表紙）。ページの添字とはずれる */
@@ -1553,11 +1761,15 @@ var Read = (function () {
   function draw() {
     if (!A()) return;
     var st = $("#stage");
+    Z.reset();
     if (yoko()) drawYoko(st); else drawTate(st);
     $("#mode").textContent = yoko() ? "1ページずつ読む" : "見開きで読む";
-    $("#hint").textContent = yoko()
+    $("#hint").textContent = (yoko()
       ? "左右にはらうとページがめくれます（← → キーでも）"
-      : "上へはらうと紙がめくれます（↑ ↓ キーでも）";
+      : "上へはらうと紙がめくれます（↑ ↓ キーでも）")
+      + (matchMedia("(pointer: coarse)").matches
+        ? "。2本指で広げると大きく見られます（ダブルタップでも）"
+        : "。ホイールかダブルクリックで大きく見られます");
   }
 
   function drawTate(st) {
@@ -1648,13 +1860,18 @@ var Read = (function () {
   function drag() {
     var d = null, stg = $("#stage");
     stg.onpointerdown = function (e) {
-      if (busy || (e.target.closest && e.target.closest("button"))) return;
+      if (e.target.closest && e.target.closest("button")) return;
+      Z.down(e);
+      if (busy || Z.on()) { if (!busy && d && !d.dir) d = null; return; }
       d = { x: e.clientX, y: e.clientY, dir: 0, id: e.pointerId, p: 0 };
     };
     stg.onpointermove = function (e) {
+      Z.move(e);
       if (!d) return;
       var dy = e.clientY - d.y, dx = e.clientX - d.x;
       if (!d.dir) {
+        if (Z.on()) { d = null; return; }
+        if (Math.abs(dx) > 10 || Math.abs(dy) > 10) Z.moved();
         if (Math.abs(dy) < 16 || Math.abs(dy) < Math.abs(dx)) return;
         var dir = dy < 0 ? 1 : -1;
         if ((dir > 0 && idx >= pages().length - 1) || (dir < 0 && idx <= 0)) { d = null; return; }
@@ -1668,12 +1885,14 @@ var Read = (function () {
       el.flip.style.transform = "rotateX(" + (d.dir > 0 ? 180 * p : 180 * (1 - p)) + "deg)";
       shade(d.dir > 0 ? .5 * p : .5 * (1 - p));
     };
-    var up = function () {
+    var up = function (e) {
+      Z.up(e);
       if (!d) return; var c = d; d = null;
       if (!c.dir) return;
       settle(c.dir, c.p > .3);
     };
     stg.onpointerup = up; stg.onpointercancel = up;
+    stg.onwheel = Z.wheel;
   }
 
   function drawYoko(st) {
@@ -1758,13 +1977,18 @@ var Read = (function () {
   function dragY() {
     var d = null, stg = $("#stage");
     stg.onpointerdown = function (e) {
-      if (busy || (e.target.closest && e.target.closest("button"))) return;
+      if (e.target.closest && e.target.closest("button")) return;
+      Z.down(e);
+      if (busy || Z.on()) { if (!busy && d && !d.dir) d = null; return; }
       d = { x: e.clientX, y: e.clientY, dir: 0, id: e.pointerId, p: 0 };
     };
     stg.onpointermove = function (e) {
+      Z.move(e);
       if (!d) return;
       var dx = e.clientX - d.x, dy = e.clientY - d.y;
       if (!d.dir) {
+        if (Z.on()) { d = null; return; }
+        if (Math.abs(dx) > 10 || Math.abs(dy) > 10) Z.moved();
         if (Math.abs(dx) < 18 || Math.abs(dx) < Math.abs(dy)) return;
         var dir = dx < 0 ? 1 : -1;
         var S = spreads();
@@ -1778,7 +2002,8 @@ var Read = (function () {
       d.p = p;
       el.yf.style.transform = "rotateY(" + (d.dir > 0 ? -180 * p : 180 * p) + "deg)";
     };
-    var up = function () {
+    var up = function (e) {
+      Z.up(e);
       if (!d) return;
       var c = d;
       d = null;
@@ -1786,9 +2011,10 @@ var Read = (function () {
       settleY(c.dir, c.p > .3);
     };
     stg.onpointerup = up; stg.onpointercancel = up;
+    stg.onwheel = Z.wheel;
   }
 
-  function go(dir) { if (yoko()) turnY(dir); else turn(dir); }
+  function go(dir) { Z.reset(); if (yoko()) turnY(dir); else turn(dir); }
   function jump(i) { idx = i || 0; sp = 0; render(); }
   /* 組む画面へ渡すのはページの添字（表紙・裏表紙の分を引く） */
   function at() {
@@ -2235,12 +2461,15 @@ var Make = (function () {
 
     /* アルバム全体の設定。表紙と裏表紙は対で付く */
     if (tab === "book") {
-    var bk = A().binding || "none";
+    var bk = A().binding || "none", sh = shapeOf(A());
+    h.push('<div class="grp"><h3>📐 本の形</h3>'
+      + tiles([[sh.icon, sh.name + "（変える）", 'data-do="shape"']])
+      + '<p>いまは「' + esc(sh.name) + '」（' + esc(sh.note) + '）。PDFの紙は ' + sh.mm[0] + '×' + sh.mm[1] + 'mm です。</p></div>');
     h.push('<div class="grp"><h3>📕 表紙のデザイン</h3><div class="binds">'
       + [{ key: "none", name: "なし" }].concat(BINDINGS).map(function (b) {
           return '<button class="bd' + (bk === b.key ? " on" : "") + '" data-bind="' + b.key + '"'
             + ' aria-label="' + esc(b.name) + '">'
-            + (b.front ? '<img src="' + b.front + '" alt="">' : '<i>なし</i>')
+            + (b.front ? '<img src="' + bindImg({ binding: b.key, shape: A().shape }, "front") + '" alt="">' : '<i>なし</i>')
             + '<span>' + esc(b.name) + '</span></button>';
         }).join("") + '</div><p>選ぶと表紙と裏表紙が対になって付きます。見る画面とPDFの最初と最後に出ます。</p></div>');
     }
@@ -2421,6 +2650,7 @@ var Make = (function () {
       b.onclick = function () {
         var d = b.getAttribute("data-do");
         if (d === "pick") return pickPhoto(it);
+        if (d === "shape") { Shelf.changeShape(A()).then(rebuild); return; }
         if (d === "unsel") { sel = null; panId = null; fillWindow(true); drawPanel(); return; }
         if (d === "pan" && it) {
           panId = panId === it.id ? null : it.id;
@@ -2568,7 +2798,7 @@ var Make = (function () {
       it.size = parseFloat(sz.value);
       var l = $("#l-sz"); if (l) l.textContent = "大きさ　" + it.size.toFixed(2) + "倍";
       var n = onPage(it);
-      if (n) n.style.fontSize = (4.2 * it.size) + "cqw"; else fillWindow();
+      if (n) n.style.fontSize = CU(4.2 * it.size); else fillWindow();
       saved(); lateStrip();
     };
   }
@@ -2731,13 +2961,7 @@ var Make = (function () {
        ページの幅 r（高さを1とする）、写真の縦横比 a。見開きは幅 2r。
        a ≥ 2r（見開きより横長）… 高さで合わせる。z=1、左は x=50(2r−a)/(r−a)、右は x=50a/(a−r)
        a < 2r                  … 幅で合わせる。z=2r÷(1ページに収めた時の幅)、左 x=0・右 x=100、y=50 */
-  function panoPos(a, side) {
-    var r = RATIO;
-    if (a >= 2 * r) {
-      return { z: 1, y: 50, x: side === "L" ? 50 * (2 * r - a) / (r - a) : 50 * a / (a - r) };
-    }
-    return { z: 2 * r / Math.max(r, a), y: 50, x: side === "L" ? 0 : 100 };
-  }
+  function panoPos(a, side) { return panoAt(a, side, RATIO); }
   function syncPano(it) {
     if (!it || !it.pg) return;
     var m = panoMate(it);
@@ -3075,13 +3299,14 @@ var Make = (function () {
      確かめ方は test/pdf_check.html（画面の誌面と並べて見比べる）
    ========================================================= */
 var PdfOut = (function () {
-  /* 仕上がりの大きさ。縦横比は RATIO（3:4）。紙は 150mm × 200mm */
+  /* 仕上がりの大きさ。紙は本の形で決まる（SHAPES の mm。縦長は 150mm × 200mm）。
+     絵の大きさは長いほうの辺で決める（縦長の「きれい」＝1500×2000px、v24 までと同じ） */
   var QUALITY = {
-    fine:  { w: 1500, q: 0.9,  name: "きれい（印刷向け）" },
-    light: { w: 900,  q: 0.8,  name: "軽め（LINEなどで送る向け）" }
+    fine:  { long: 2000, q: 0.9,  name: "きれい（印刷向け）" },
+    light: { long: 1200, q: 0.8,  name: "軽め（LINEなどで送る向け）" }
   };
   var MM = 72 / 25.4;
-  var PAGE_W = 150 * MM, PAGE_H = PAGE_W / RATIO;
+  function widthPx(Q, r) { return Math.round(r >= 1 ? Q.long : Q.long * r); }
 
   /* ---------- 書体 ---------- */
   function cssVar(n) {
@@ -3175,7 +3400,7 @@ var PdfOut = (function () {
   }
 
   function drawPage(p, num, W) {
-    var H = Math.round(W / RATIO), cq = W / 100;
+    var H = Math.round(W / RATIO), cq = W / 100, cu = Math.min(W, 0.75 * H) / 100;
     var c = document.createElement("canvas");
     c.width = W; c.height = H;
     var g = c.getContext("2d");
@@ -3202,20 +3427,20 @@ var PdfOut = (function () {
         }
         if (it.kind === "photo") drawPhoto(g, it, pic[it.photo], x, y, w, h, cq);
         else if (it.kind === "line") drawDeco(g, lineShapes(it, it.w, it.h / RATIO, lineInk(it, paper)), x, y, w, h, cq);
-        else drawText(g, it, paper, x, y, w, h, cq);
+        else drawText(g, it, paper, x, y, w, h, cq, cu);
         g.restore();
       });
 
       /* ページ番号（見る画面と同じ） */
       if (num) {
-        var fs = 2.6 * cq;
+        var fs = 2.6 * cu;
         g.font = "400 " + fs + "px " + cssVar("--mincho");
         try { g.letterSpacing = (0.2 * fs) + "px"; } catch (e) {}
         var m = g.measureText(String(num));
         var asc = m.fontBoundingBoxAscent || fs * 0.88, dsc = m.fontBoundingBoxDescent || fs * 0.12;
         g.fillStyle = nomInk(paper);
         g.textBaseline = "alphabetic";
-        g.fillText(String(num), (W - m.width) / 2, H - 2.2 * cq - dsc);
+        g.fillText(String(num), (W - m.width) / 2, H - 2.2 * cu - dsc);
         try { g.letterSpacing = "0px"; } catch (e) {}
       }
       return c;
@@ -3224,11 +3449,11 @@ var PdfOut = (function () {
 
   /* 表紙・裏表紙。★題名の書式は coverHTML と .ctitle（style.css）に合わせる */
   function drawCover(a, side, W) {
-    var H = Math.round(W / RATIO), cq = W / 100, b = bindingOf(a);
+    var H = Math.round(W / RATIO), cq = Math.min(W, 0.75 * H) / 100, b = bindingOf(a);   /* 題名は字の単位（cu） */
     var c = document.createElement("canvas");
     c.width = W; c.height = H;
     var g = c.getContext("2d");
-    return loadImg(side === "back" ? b.back : b.front).then(function (img) {
+    return loadImg(bindImg(a, side === "back" ? "back" : "front")).then(function (img) {
       g.drawImage(img, 0, 0, W, H);
       if (side !== "front" || !a.title) return c;
       var fs = COVER_T.size * cq, lh = fs * COVER_T.lh, bw = COVER_T.width / 100 * W;
@@ -3294,11 +3519,12 @@ var PdfOut = (function () {
     g.restore();
   }
 
-  function drawText(g, it, paper, x, y, w, h, cq) {
+  /* cq＝ページの幅の1%（枠・余白）、cu＝字の単位（字の大きさ・縁取り・影） */
+  function drawText(g, it, paper, x, y, w, h, cq, cu) {
     var real = textInk(it, paper);
     drawDeco(g, boxShapes(it, it.w, it.h / RATIO, real), x, y, w, h, cq);
     if (!it.text) return;
-    var fs = 4.2 * (it.size || 1) * cq, lh = fs * 1.75, pad = boxPad(it) * cq;
+    var fs = 4.2 * (it.size || 1) * cu, lh = fs * 1.75, pad = boxPad(it) * cq;
     var cw = w - 2 * pad, ch = h - 2 * pad;
     g.font = fontOf(it, fs);
     var lines = wrap(g, it.text, cw);
@@ -3306,7 +3532,7 @@ var PdfOut = (function () {
     var asc = m.fontBoundingBoxAscent || fs * 0.88, dsc = m.fontBoundingBoxDescent || fs * 0.12;
     /* 枠の上下まん中に寄せる（画面の justify-content:center と同じ。はみ出たら上下とも切れる） */
     var top = y + pad + (ch - lines.length * lh) / 2;
-    var olw = (it.olW || 0) * 2 * cq, edge = edgeInk(it, real);
+    var olw = (it.olW || 0) * 2 * cu, edge = edgeInk(it, real);
     var pos = lines.map(function (ln, i) {
       var lw = g.measureText(ln).width;
       return [ln, x + (it.align === "center" ? pad + (cw - lw) / 2 : it.align === "right" ? pad + cw - lw : pad),
@@ -3332,7 +3558,7 @@ var PdfOut = (function () {
       var t = L.getContext("2d");
       t.font = g.font;
       glyphs(t, X0, Y0);
-      shadowAt(g, it.rot, sh.dx * cq, sh.dy * cq, sh.blur * cq, sh.color);
+      shadowAt(g, it.rot, sh.dx * cu, sh.dy * cu, sh.blur * cu, sh.color);
       /* 影のずれは回す前の向きで効くので、遠くへやる分も回す前の向きで足す */
       var a = (it.rot || 0) * Math.PI / 180;
       g.shadowOffsetX += FAR * Math.cos(a); g.shadowOffsetY += FAR * Math.sin(a);
@@ -3402,14 +3628,17 @@ var PdfOut = (function () {
     /* 番号の振り方: 1=目録 2=ページの束 3=題名など、ページごとに 3つずつ */
     var kids = [];
     for (var i = 0; i < n; i++) kids.push((4 + i * 3) + " 0 R");
-    var pw = PAGE_W.toFixed(2), ph = PAGE_H.toFixed(2);
+    var shp = shapeOf(a), keep = RATIO, W = widthPx(Q, shp.r);
+    var pw = (shp.mm[0] * MM).toFixed(2), ph = (shp.mm[1] * MM).toFixed(2);
 
     var chain = wr.put(ascii("%PDF-1.4" + NL + "%âãÏÓ" + NL))
       .then(function () { return fontsReady(a); });
     pgs.forEach(function (p, i) {
       chain = chain.then(function () {
         if (stop && stop()) throw new Error("stop");
-        return p.cover ? drawCover(a, p.cover, Q.w) : drawPage(p, i + 1 - off, Q.w);
+        /* ★描く間だけこの本の形にする（本棚から作る時は開いている本が無い） */
+        RATIO = shp.r;
+        return p.cover ? drawCover(a, p.cover, W) : drawPage(p, i + 1 - off, W);
       }).then(function (cv) {
         var cw = cv.width, ch = cv.height;
         return jpeg(cv, Q.q).then(function (img) {
@@ -3428,6 +3657,7 @@ var PdfOut = (function () {
       }).then(function () { if (onStep) onStep(i + 1, n); });
     });
     return chain
+      .then(function (v) { RATIO = keep; return v; }, function (e) { RATIO = keep; throw e; })
       .then(function () { return wr.obj(1, "<< /Type /Catalog /Pages 2 0 R >>"); })
       .then(function () {
         return wr.obj(2, "<< /Type /Pages /Kids [" + kids.join(" ") + "] /Count " + n + " >>");
@@ -3616,7 +3846,7 @@ var BookFile = (function () {
   }
   /* 本の中身（1行目）。写真の実体は入れない。★id と日付は受け取る側で付け直す */
   function head(a, n) {
-    return { kind: KIND, v: VER, title: a.title || "無題", binding: a.binding || null,
+    return { kind: KIND, v: VER, title: a.title || "無題", binding: a.binding || null, shape: a.shape || null,
              pages: a.pages || [], photos: n, made: today() };
   }
 
@@ -3756,6 +3986,7 @@ var BookFile = (function () {
     var a = { title: String(h.title || "無題").slice(0, 40), pages: pages,
               locked: true, gotAt: today() };
     if (bindingOf({ binding: h.binding })) a.binding = h.binding;
+    if (shapeOf({ shape: h.shape }).key === h.shape && h.shape !== "tate") a.shape = h.shape;
     return a;
   }
   var PHOTO = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/;
@@ -3890,6 +4121,7 @@ var App = (function () {
     var a = Store.byId(id);
     if (!a) return;
     cur = a;
+    useShape(a);
     /* ★最初に出す2ページ分だけ先に引き上げる。
        アルバム全部を待つと、枚数が増えるほど開くのが遅くなる */
     withPhotos(photoKeysOf(a.pages || [], [0, 1]), function () {
